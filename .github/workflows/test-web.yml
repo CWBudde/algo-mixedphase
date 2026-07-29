@@ -1,0 +1,34 @@
+name: Web Lab Tests
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: State and browser smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build WebAssembly
+        run: ./web/build-wasm.sh
+
+      - name: Test experiment state
+        run: node --test web/lab-state.test.mjs
+
+      - name: Test in Chrome
+        run: ./scripts/test-web.sh

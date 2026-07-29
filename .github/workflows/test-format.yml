@@ -28,6 +28,13 @@ jobs:
       - name: Install prettier
         run: npm install -g prettier
 
+      - name: Install typstyle
+        run: |
+          curl -fsSL \
+            https://github.com/typstyle-rs/typstyle/releases/download/v0.13.17/typstyle-x86_64-unknown-linux-musl \
+            -o /usr/local/bin/typstyle
+          chmod +x /usr/local/bin/typstyle
+
       - name: Run treefmt
         uses: isbecker/treefmt-action@v2
         with:

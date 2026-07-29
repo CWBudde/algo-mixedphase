@@ -87,6 +87,22 @@
 // evaluations per penalty stage, so a large FFT size is expensive in a way it
 // is not for the transform-based methods.
 //
+// # Conditioning of the alternating factorisation
+//
+// The [DesignIterative] updates are not a contraction. On the 129-tap,
+// 0.08-cutoff low-pass at delay 8, the default grid and magnitude floor produce
+// RMS dB errors of 5.366154, 4.609232 and 4.917232 over the first three
+// correction passes. Continuing to pass twelve amplifies native and
+// JavaScript/WASM rounding into 10.739658 and 15.829906 dB respectively.
+//
+// A larger Epsilon bounds that late growth but does not make the alternating
+// truncated projections monotone. By default the design therefore stops
+// before the first rising pass and returns the previous factors. This case
+// accepts two passes and both builds agree on the checked coefficients within
+// 1e-10. A negative [IterativeConfig.ToleranceDB] disables both the settling
+// and rising-error stops, and should be used only when investigating a fixed
+// iteration budget.
+//
 // # Minimum-phase reconstruction
 //
 // Both designs rest on a spectral factorisation that turns a sampled magnitude

@@ -25,3 +25,6 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+      - name: Cross-build determinism
+        run: ./scripts/test-cross-build.sh

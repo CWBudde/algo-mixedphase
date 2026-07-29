@@ -135,8 +135,8 @@ type IterativeConfig struct {
 	Method MinimumPhaseMethod
 
 	// ToleranceDB stops the iteration once the change in RMS magnitude error
-	// falls below this value. Zero uses 1e-7 dB. A negative value disables
-	// early stopping.
+	// falls below this value or the error starts rising. A rising pass is
+	// discarded. Zero uses 1e-7 dB. A negative value disables early stopping.
 	ToleranceDB float64
 }
 
@@ -295,7 +295,7 @@ type Result struct {
 	MinimumPhasePart []float64
 	LinearPhasePart  []float64
 
-	// Iterations is the number of alternating correction passes performed by
+	// Iterations is the number of alternating correction passes accepted by
 	// [DesignIterative], of reweighting passes performed by
 	// [DesignComplexLeastSquares], or of accepted quasi-Newton steps performed
 	// by [DesignLowGroupDelay].

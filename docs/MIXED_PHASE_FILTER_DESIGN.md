@@ -58,7 +58,53 @@ The first implementation is in `mixedphase`:
 - `DesignLowGroupDelay`: direct magnitude-constrained delay optimisation; and
 - `Analyze`: common frequency- and time-domain metrics.
 
-`examples/mixedphase` emits a CSV comparison over several delay budgets.
+`examples/mixedphase` runs the fixed multi-target reference suite described
+below and emits the committed `docs/reference-results.csv`.
+
+### Conditioning and stopping the alternating loop
+
+The correction loop is not a contraction. On the 129-tap, 0.08-cutoff
+low-pass at delay 8, with the default 2048-point grid and scale-relative
+`Epsilon` (approximately `1e-12`), native RMS magnitude error over passes one
+through six is 5.366154, 4.609232, 4.917232, 4.686326, 4.852711, and
+4.605098 dB. The updates oscillate before the truncated-factor division becomes
+ill-conditioned: at pass twelve the native result is 10.739658 dB and the
+JavaScript/WASM result is 15.829906 dB.
+
+Raising `Epsilon` to `1e-6` bounds the pass-twelve result to 4.767566 dB
+native and 4.855305 dB in WASM, but does not make the updates monotone or
+platform-independent. The oscillation is therefore inherent to alternating
+truncated projections; the late catastrophic growth is caused by dividing
+through factor nulls with too little regularisation.
+
+`DesignIterative` now accepts the first pass unconditionally and stops before
+the first subsequent rise, returning the previous factors. Pass two is the
+first reproducible local minimum for the delay-8 case: native and WASM produce
+4.609232 dB and agree on the checked coefficients within `1e-10`. Continuing
+through a rise reaches a slightly lower pass-six value, but that path is already
+sensitive to platform rounding and is not a reproducible stopping rule.
+
+There is a metric trade-off even before correction: the uncorrected
+factorisation has a lower RMS dB error of 3.716940 dB, but a much larger
+relative linear-magnitude error of 0.021794, against 0.005426 after the two
+accepted passes. The initial factorisation is therefore not included when
+detecting a rise between complete correction passes.
+
+The delay-sweep regression uses a maximum budget of 12 passes and the default
+`1e-7` dB stopping tolerance:
+
+| Delay | Accepted passes | Relative magnitude error | RMS error |
+| ----: | --------------: | -----------------------: | --------: |
+|     0 |               0 |              0.000096348 |  0.800068 |
+|     8 |               2 |              0.005426207 |  4.609232 |
+|    16 |               1 |              0.013427020 |  7.469879 |
+|    32 |               1 |              0.004819747 |  8.623192 |
+|    64 |               0 |              0.001575002 | 21.639157 |
+
+The zero- and maximum-delay endpoints need no alternating correction.
+`TestIterativeCrossBuildDeterminism` pins these metrics and
+`scripts/test-cross-build.sh` runs the delay-8 golden case in both native and
+`GOOS=js GOARCH=wasm` builds.
 
 ## Established alternatives
 
@@ -214,26 +260,96 @@ Automatic differentiation or a generic nonlinear optimiser can make step 4
 easier to implement, but using one is an engineering choice rather than a new
 filter-design principle.
 
-## Comparison protocol
+## Common reference suite
 
-Every method should use identical target samples, FFT grid, tap count, and
-frequency weights. At minimum record:
+`internal/reference` is the one harness used for the general mixed-phase
+methods. `graphiceq` stays separate because an octave-band shelf/FIR structure
+cannot represent arbitrary low-pass, crossover, or notch targets. Every
+reference row uses 48 kHz, 129 output taps, a 1024-point design/analysis grid,
+the same target samples, and target-magnitude-squared group-delay weights over
+the relevant band.
 
-- relative L2 linear-magnitude error;
-- RMS and maximum dB-magnitude error, with a stated floor;
-- passband ripple and stopband attenuation for classical filters;
-- group-delay mean, ripple, and maximum over the relevant passband;
-- peak position, energy centroid, and energy before the peak;
-- runtime, iteration count, and sensitivity to initialisation; and
-- coefficient dynamic range.
+The three phase-controlled methods receive a 16-sample linear-phase allocation.
+`DesignIterative` may accept at most 12 correction passes;
+`DesignComplexLeastSquares` may run 16 Lawson passes. The low-group-delay
+method chooses its own phase, so the phase-delay column is empty for it; its
+fixed budget is a 2 dB magnitude tolerance and four penalty stages of at most
+80 L-BFGS steps each. The room result starts from the default minimum-phase
+initialisation, as do the other low-delay rows.
 
-The initial test set should contain:
+The five 257-tap reference prototypes are:
 
-1. the paper's first-order 1 kHz low-pass example at 48 kHz;
-2. a narrow parametric-EQ correction;
-3. a crossover response where phase matching matters;
-4. a deep notch, which stresses spectral division; and
-5. a measured loudspeaker/room correction curve.
+1. a first-order 1 kHz low-pass;
+2. a +9 dB, 3 kHz parametric-EQ bell with a 0.18-octave Gaussian width;
+3. a fourth-order Linkwitz–Riley 2 kHz low-pass crossover branch;
+4. a -60 dB, 6 kHz notch with a 0.10-octave Gaussian width; and
+5. a room-correction curve obtained by inverting and capping at ±12 dB a
+   one-third-octave reduction of the measured OpenAIR
+   [`r8-omni-conf_b.wav`][openair-room] studio response.
+
+The CSV records relative linear-magnitude error; RMS and maximum dB error at
+the `Analyze` -120 dB floor; weighted group-delay mean, RMS ripple, and peak;
+peak index, energy centroid, and energy before the peak; coefficient peak and
+dynamic range; iterations; constraint violation; and runtime. Coefficient
+range is the peak divided by the smallest coefficient no more than 240 dB
+below it. Group-delay bins below `1e-6` absolute magnitude are excluded because
+phase at a null is not meaningful.
+
+### Results
+
+The compact table shows the principal trade-offs; the committed
+[`reference-results.csv`](reference-results.csv) contains every metric. Relative
+error and pre-peak energy are percentages. Runtime is the fastest of three
+complete design calls on Go 1.26.1/linux-amd64 on a 12th-generation Intel
+Core i7-1255U; it is a machine-local comparison, while all quality columns are
+golden-tested independently of runtime.
+
+<!-- reference-results:start -->
+
+| Target          | Method              | Rel. error | Mean delay | Pre-peak |   Runtime |
+| :-------------- | :------------------ | ---------: | ---------: | -------: | --------: |
+| low-pass        | Budde iterative     |   0.00010% |      21.86 |   17.74% |   0.72 ms |
+|                 | phase interpolation |   0.22262% |      20.40 |    1.74% |   0.28 ms |
+|                 | complex minimax     |   0.40294% |      20.39 |    1.74% |   5.94 ms |
+|                 | low group delay     |  22.79885% |       1.76 |   24.37% |  81.63 ms |
+| parametric EQ   | Budde iterative     |   0.07904% |      22.21 |    0.00% |   0.53 ms |
+|                 | phase interpolation |   1.35975% |      20.94 |    0.16% |   0.16 ms |
+|                 | complex minimax     |   2.58983% |      20.79 |    0.31% |   5.67 ms |
+|                 | low group delay     |  21.59908% |       1.93 |    0.00% | 100.55 ms |
+| crossover       | Budde iterative     |   0.00001% |      26.41 |   44.77% |   0.92 ms |
+|                 | phase interpolation |   0.07248% |      23.81 |   39.34% |   0.28 ms |
+|                 | complex minimax     |   0.09716% |      23.81 |   39.35% |   6.77 ms |
+|                 | low group delay     |   7.11710% |       9.73 |   35.27% | 143.78 ms |
+| deep notch      | Budde iterative     |   0.14710% |      25.19 |    0.01% |   1.72 ms |
+|                 | phase interpolation |   0.62083% |      22.55 |    0.00% |   0.20 ms |
+|                 | complex minimax     |   1.03374% |      22.50 |    0.02% |   8.19 ms |
+|                 | low group delay     |   3.53804% |       6.67 |    0.00% | 191.20 ms |
+| room correction | Budde iterative     |   0.13143% |      16.50 |    0.00% |   2.27 ms |
+|                 | phase interpolation |   0.28140% |      16.38 |    0.06% |   0.18 ms |
+|                 | complex minimax     |   0.67989% |      16.38 |    0.06% |   7.07 ms |
+|                 | low group delay     |   8.63192% |       0.10 |    0.00% |  89.70 ms |
+
+<!-- reference-results:end -->
+
+The alternating factorisation wins linear-magnitude accuracy on all five
+targets, often by more than an order of magnitude. That is not a universal
+win: it pays with more delay, reaches 44.77% pre-peak energy on the crossover,
+and needs up to 238 dB of coefficient range there. Phase interpolation is the
+speed winner and generally reduces pre-ringing, at the price of larger
+magnitude error.
+
+Lawson minimax controls peak _complex_ error, not these magnitude-only metrics.
+It helps the deep notch's RMS/maximum dB errors relative to phase interpolation
+(2.55/21.14 dB against 3.08/24.94 dB), but otherwise adds runtime without
+winning a magnitude, delay, or energy column. The direct low-delay optimiser
+wins mean delay on every target and keeps its 2 dB constraint to within
+`8.6e-4`, but its relative magnitude error grows to 3.54–22.80%. Its deep-notch
+peak delay is still 26.61 samples: mean delay near a spectral null must not be
+read as a peak-delay guarantee.
+
+Run `just compare` to regenerate both committed CSVs. The reference-package
+test compares every non-runtime cell with the committed artifact, so metric
+changes require an explicit regeneration and review.
 
 ## Demo packaging
 
@@ -267,6 +383,7 @@ literature search, not a patent or formal novelty search.
 [lai-2009]: https://doi.org/10.1109/TSP.2009.2021639
 [lee-2006]: https://doi.org/10.1109/TSP.2006.872542
 [olivier-2022]: https://doi.org/10.1049/sil2.12166
+[openair-room]: https://github.com/Mu-Y/RoomIR-equalizer/blob/master/r8-omni-conf_b.wav
 [potchinkov-1995]: https://doi.org/10.1016/0165-1684(95)00077-Q
 [wu-2013]: https://doi.org/10.1016/j.sigpro.2013.01.015
 [yan-ma-2004]: https://doi.org/10.1016/j.dsp.2004.08.003

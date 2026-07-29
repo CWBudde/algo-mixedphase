@@ -55,6 +55,12 @@ options = ["-s", "-w"]
 includes = ["*.sh"]
 priority = 1
 
+# Typst paper formatter
+[formatter.typstyle]
+command = "typstyle"
+options = ["-i"]
+includes = ["*.typ"]
+
 # Markdown, YAML, JSON formatter
 [formatter.prettier]
 command = "prettier"

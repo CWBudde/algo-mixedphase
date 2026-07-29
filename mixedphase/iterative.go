@@ -197,7 +197,7 @@ func DesignIterative(prototype []float64, cfg IterativeConfig) (Result, error) {
 			epsilon,
 		)
 
-		minimumPart, transformErr = designMinimumPart(
+		candidateMinimumPart, transformErr := designMinimumPart(
 			w,
 			residualMagnitude,
 			minimumLength,
@@ -208,7 +208,7 @@ func DesignIterative(prototype []float64, cfg IterativeConfig) (Result, error) {
 			return Result{}, transformErr
 		}
 
-		minimumSpectrum, transformErr = w.forwardReal(minimumPart)
+		minimumSpectrum, transformErr = w.forwardReal(candidateMinimumPart)
 		if transformErr != nil {
 			return Result{}, transformErr
 		}
@@ -219,7 +219,7 @@ func DesignIterative(prototype []float64, cfg IterativeConfig) (Result, error) {
 			epsilon,
 		)
 
-		linearPart, transformErr = designLinearPart(
+		candidateLinearPart, transformErr := designLinearPart(
 			w,
 			residualMagnitude,
 			linearLength,
@@ -229,7 +229,10 @@ func DesignIterative(prototype []float64, cfg IterativeConfig) (Result, error) {
 			return Result{}, transformErr
 		}
 
-		taps, convolutionErr := conv.Direct(minimumPart, linearPart)
+		taps, convolutionErr := conv.Direct(
+			candidateMinimumPart,
+			candidateLinearPart,
+		)
 		if convolutionErr != nil {
 			return Result{}, fmt.Errorf(
 				"mixedphase: convolve factors: %w",
@@ -242,14 +245,22 @@ func DesignIterative(prototype []float64, cfg IterativeConfig) (Result, error) {
 			return Result{}, analyzeErr
 		}
 
-		performed = i + 1
+		currentError := metrics.RMSMagnitudeErrorDB
 
-		if tolerance >= 0 &&
-			math.Abs(previousError-metrics.RMSMagnitudeErrorDB) < tolerance {
+		if tolerance >= 0 && currentError > previousError {
 			break
 		}
 
-		previousError = metrics.RMSMagnitudeErrorDB
+		minimumPart = candidateMinimumPart
+		linearPart = candidateLinearPart
+		performed = i + 1
+
+		if tolerance >= 0 &&
+			math.Abs(previousError-currentError) < tolerance {
+			break
+		}
+
+		previousError = currentError
 	}
 
 	taps, err := conv.Direct(minimumPart, linearPart)

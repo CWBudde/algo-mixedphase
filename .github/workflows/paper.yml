@@ -1,0 +1,49 @@
+name: Paper
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build English paper
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Typst
+        uses: typst-community/setup-typst@v3
+        with:
+          typst-version: "0.15.0"
+
+      - name: Install Just
+        uses: extractions/setup-just@v2
+
+      - name: Install typstyle
+        run: |
+          curl -fsSL \
+            https://github.com/typstyle-rs/typstyle/releases/download/v0.13.17/typstyle-x86_64-unknown-linux-musl \
+            -o /usr/local/bin/typstyle
+          chmod +x /usr/local/bin/typstyle
+
+      - name: Check paper formatting
+        run: typstyle --check docs/paper/paper.typ docs/paper/style.typ
+
+      - name: Build paper
+        run: just paper
+
+      - name: Upload paper
+        uses: actions/upload-artifact@v4
+        with:
+          name: mixed-phase-filter-design-en
+          path: docs/paper/mixed-phase-filter-design-en.pdf
+          if-no-files-found: error

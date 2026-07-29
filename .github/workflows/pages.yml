@@ -32,6 +32,16 @@ jobs:
       - name: Build web wasm assets
         run: ./web/build-wasm.sh
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Test web lab
+        run: |
+          node --test web/lab-state.test.mjs
+          ./scripts/test-web.sh
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

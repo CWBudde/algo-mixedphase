@@ -55,14 +55,19 @@ func main() {
 
 ## Comparing the methods
 
-The two examples print CSV, one row per method, so results can be diffed across changes:
+The common reference suite covers low-pass, parametric-EQ, crossover,
+deep-notch, and measured room-correction targets. It records quality, delay,
+pre-ringing, coefficient range, iteration, and runtime metrics for all four
+general mixed-phase methods. The separate graphic-EQ comparison remains scoped
+to its octave-band structure.
 
 ```bash
-just compare           # or: go run ./examples/mixedphase && go run ./examples/graphiceq
+just compare # Regenerate docs/reference-results.csv and docs/graphiceq-results.csv
 ```
 
-`examples/graphiceq` prints each hybrid split next to an all-FIR design forced to the same
-tap count, which is the comparison that actually decides whether the split is worth taking:
+`docs/graphiceq-results.csv` places each hybrid split next to an all-FIR design
+forced to the same tap count, which is the comparison that actually decides
+whether the split is worth taking:
 
 ```
 method,iir_bands,taps,latency,rms_error_db,max_error_db
@@ -88,16 +93,21 @@ try next rather than by API stability.
 
 ## Development
 
-Requirements: Go 1.25+, `just` (optional)
+Requirements: Go 1.25+, `just` (optional). Building the paper additionally requires
+Typst 0.15.0.
 
 ```bash
 just test       # Run all tests
+just test-cross-build # Check native vs JavaScript/WASM determinism
+just test-web   # Exercise lab state and the real worker/WASM browser path
 just test-race  # Run tests with race detector
 just lint       # Run golangci-lint
 just fmt        # Format code
 just bench      # Run benchmarks
 just ci         # Run all CI checks
 just web-demo   # Build and serve the Mixed Phase Lab locally
+just paper      # Build the revised English paper
+just paper-watch # Rebuild the paper while editing
 ```
 
 ## Project Docs

@@ -1,28 +1,45 @@
 # Paper
 
-This directory holds the paper this repository accompanies.
+This directory contains the source of the revised English paper accompanying the
+repository. The Typst sources are canonical; the PDF is a generated build artifact.
 
-## What belongs here
+## Build
 
-- `daga-2012-mixed-phase.pdf` — the original DAGA 2012 contribution (German).
-- `mixed-phase-filter-design-en.pdf` — the revised English version.
+Install Typst 0.15.0 and run:
 
-Drop the PDFs in and they are picked up by the links below; `treefmt.toml` already excludes
-`**/*.pdf` from formatting, and nothing in CI touches them.
+```bash
+just paper
+```
 
-## Where they are referenced
+The result is `docs/paper/mixed-phase-filter-design-en.pdf`. It is ignored by Git because
+CI builds and uploads the same PDF as an artifact. During editing, use:
 
-Once a PDF is present, link it from:
+```bash
+just paper-watch
+```
 
-- `README.md` — the "software companion to …" sentence in the intro.
-- `web/index.html` — a link in the Mixed Phase Lab header, so the demo and the text sit
-  next to each other.
-- `docs/MIXED_PHASE_FILTER_DESIGN.md` — at the sections that implement a numbered method
-  from the paper.
+`just fmt` formats `.typ` sources with `typstyle`; CI uses the same formatter.
+
+## Layout
+
+- `paper.typ` — the single paper entry point and current English draft.
+- `style.typ` — page, typography, and reusable callout definitions.
+- `references.bib` — bibliography metadata.
+- `figures/` — generated figures derived from committed Phase 3 benchmark data.
+
+The original German contribution, [“Gemischtphasige Filter”][original], remains the
+historical source. It is linked rather than copied here until its redistribution terms have
+been confirmed.
 
 ## Keeping paper and code in step
 
 The point of this repository is that the paper's claims are re-runnable. When a figure or
-table in the paper corresponds to a measurement here, note the command that reproduces it
-next to the reference — `just compare` regenerates both example CSVs, and the package tests
-carry the assertions behind the quoted numbers.
+table corresponds to a measurement here, the reproducibility map in `paper.typ` records the
+implementation, evidence, configuration budget, and command that reproduces it.
+`just compare` regenerates the comparison CSVs, and the package tests carry the assertions
+behind quoted numbers.
+
+Normal paper builds consume committed data and never rerun timing benchmarks. Phase 3 will
+add the CSV-to-figure refresh command once the common benchmark schema is stable.
+
+[original]: https://pub.dega-akustik.de/DAGA_2012/data/articles/000281.pdf

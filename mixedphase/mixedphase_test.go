@@ -2,7 +2,9 @@ package mixedphase
 
 import (
 	"errors"
+	"fmt"
 	"math"
+	"runtime"
 	"testing"
 
 	"github.com/cwbudde/algo-dsp/dsp/window"
@@ -164,6 +166,207 @@ func TestIterativeImprovesUncorrectedFactorisation(t *testing.T) {
 			corrected.Metrics.RMSMagnitudeErrorDB,
 			initial.Metrics.RMSMagnitudeErrorDB,
 		)
+	}
+}
+
+func TestIterativeStopsBeforeRisingError(t *testing.T) {
+	prototype := lowpassPrototype(129, 0.08)
+	cfg := IterativeConfig{
+		Length:     129,
+		Delay:      8,
+		Iterations: 12,
+	}
+
+	result, err := DesignIterative(prototype, cfg)
+	if err != nil {
+		t.Fatalf("DesignIterative() error = %v", err)
+	}
+
+	if result.Iterations != 2 {
+		t.Fatalf("Iterations = %d, want 2 accepted passes", result.Iterations)
+	}
+
+	cfg.Iterations = 2
+	cfg.ToleranceDB = -1
+
+	twoPass, err := DesignIterative(prototype, cfg)
+	if err != nil {
+		t.Fatalf("two-pass DesignIterative() error = %v", err)
+	}
+
+	cfg.Iterations = 3
+
+	threePass, err := DesignIterative(prototype, cfg)
+	if err != nil {
+		t.Fatalf("three-pass DesignIterative() error = %v", err)
+	}
+
+	if result.Metrics != twoPass.Metrics {
+		t.Fatalf(
+			"early-stopped metrics = %+v, two-pass metrics = %+v",
+			result.Metrics,
+			twoPass.Metrics,
+		)
+	}
+
+	if threePass.Metrics.RMSMagnitudeErrorDB <=
+		twoPass.Metrics.RMSMagnitudeErrorDB {
+		t.Fatalf(
+			"three-pass RMS error = %g dB, two-pass error = %g dB",
+			threePass.Metrics.RMSMagnitudeErrorDB,
+			twoPass.Metrics.RMSMagnitudeErrorDB,
+		)
+	}
+}
+
+func TestIterativeCrossBuildDeterminism(t *testing.T) {
+	result, err := DesignIterative(
+		lowpassPrototype(129, 0.08),
+		IterativeConfig{
+			Length:     129,
+			Delay:      8,
+			Iterations: 12,
+		},
+	)
+	if err != nil {
+		t.Fatalf("DesignIterative() error = %v", err)
+	}
+
+	if result.Iterations != 2 {
+		t.Fatalf("Iterations = %d, want 2 accepted passes", result.Iterations)
+	}
+
+	wantMetrics := Metrics{
+		RMSMagnitudeErrorDB:    4.609232122872466,
+		MaxMagnitudeErrorDB:    21.610395552671665,
+		RelativeMagnitudeError: 0.0054262072164596,
+		PeakIndex:              21,
+		EnergyCentroid:         23.536691702175123,
+		PrePeakEnergyRatio:     0.3932616859589017,
+	}
+
+	assertClose := func(name string, got, want, tolerance float64) {
+		t.Helper()
+
+		if math.Abs(got-want) > tolerance {
+			t.Errorf("%s = %.17g, want %.17g ± %g", name, got, want, tolerance)
+		}
+	}
+
+	assertClose(
+		"RMSMagnitudeErrorDB",
+		result.Metrics.RMSMagnitudeErrorDB,
+		wantMetrics.RMSMagnitudeErrorDB,
+		2e-9,
+	)
+	assertClose(
+		"MaxMagnitudeErrorDB",
+		result.Metrics.MaxMagnitudeErrorDB,
+		wantMetrics.MaxMagnitudeErrorDB,
+		2e-9,
+	)
+	assertClose(
+		"RelativeMagnitudeError",
+		result.Metrics.RelativeMagnitudeError,
+		wantMetrics.RelativeMagnitudeError,
+		2e-9,
+	)
+	assertClose(
+		"EnergyCentroid",
+		result.Metrics.EnergyCentroid,
+		wantMetrics.EnergyCentroid,
+		2e-9,
+	)
+	assertClose(
+		"PrePeakEnergyRatio",
+		result.Metrics.PrePeakEnergyRatio,
+		wantMetrics.PrePeakEnergyRatio,
+		2e-9,
+	)
+
+	if result.Metrics.PeakIndex != wantMetrics.PeakIndex {
+		t.Errorf(
+			"PeakIndex = %d, want %d",
+			result.Metrics.PeakIndex,
+			wantMetrics.PeakIndex,
+		)
+	}
+
+	wantTaps := map[int]float64{
+		0:   -1.194549316658406e-6,
+		8:   -0.0010995246975603714,
+		21:  0.13952194757418454,
+		64:  0.012394538199736068,
+		128: -1.4609143543942293e-7,
+	}
+	for index, want := range wantTaps {
+		assertClose(
+			fmt.Sprintf("Taps[%d]", index),
+			result.Taps[index],
+			want,
+			1e-10,
+		)
+	}
+}
+
+func TestIterativeConditioning(t *testing.T) {
+	prototype := lowpassPrototype(129, 0.08)
+	testCases := []struct {
+		name       string
+		iterations int
+		epsilon    float64
+		wantNative float64
+		wantWASM   float64
+		wantLinear float64
+	}{
+		{"uncorrected", -1, 0, 3.716940096, 3.716940096, 0.021793880},
+		{"pass 1", 1, 0, 5.366154225, 5.366154225, 0},
+		{"pass 2", 2, 0, 4.609232123, 4.609232122, 0.005426207},
+		{"pass 3", 3, 0, 4.917231861, 4.917231836, 0},
+		{"pass 4", 4, 0, 4.686326143, 4.686326150, 0},
+		{"pass 5", 5, 0, 4.852711194, 4.852727335, 0},
+		{"pass 6", 6, 0, 4.605097725, 4.596586007, 0},
+		{"pass 12", 12, 0, 10.739657501, 15.829906398, 0},
+		{"regularised pass 12", 12, 1e-6, 4.767565981, 4.855304690, 0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := DesignIterative(prototype, IterativeConfig{
+				Length:      129,
+				Delay:       8,
+				Iterations:  tc.iterations,
+				Epsilon:     tc.epsilon,
+				ToleranceDB: -1,
+			})
+			if err != nil {
+				t.Fatalf("DesignIterative() error = %v", err)
+			}
+
+			want := tc.wantNative
+			if runtime.GOOS == "js" {
+				want = tc.wantWASM
+			}
+
+			if math.Abs(result.Metrics.RMSMagnitudeErrorDB-want) > 1e-6 {
+				t.Errorf(
+					"RMSMagnitudeErrorDB = %.9f, want %.9f ± 1e-6",
+					result.Metrics.RMSMagnitudeErrorDB,
+					want,
+				)
+			}
+
+			if tc.wantLinear > 0 &&
+				math.Abs(
+					result.Metrics.RelativeMagnitudeError-tc.wantLinear,
+				) > 1e-6 {
+				t.Errorf(
+					"RelativeMagnitudeError = %.9f, want %.9f ± 1e-6",
+					result.Metrics.RelativeMagnitudeError,
+					tc.wantLinear,
+				)
+			}
+		})
 	}
 }
 

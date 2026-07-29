@@ -1,0 +1,37 @@
+# One-third-octave power average of OpenAIR r8-omni-conf_b.wav.
+# Source: https://github.com/Mu-Y/RoomIR-equalizer/blob/master/r8-omni-conf_b.wav
+# The 96 kHz, 24-bit measured studio impulse response was resampled to 48 kHz,
+# transformed as a whole, power-averaged from centre/2^(1/6) to
+# centre*2^(1/6), and normalised by the mean from 500 Hz through 2 kHz.
+frequency_hz,measured_response_db
+20,-13.802842
+25,-7.082868
+31.5,-4.146338
+40,3.835016
+50,7.273581
+63,7.237333
+80,9.639487
+100,10.439023
+125,17.133065
+160,20.373741
+200,21.696160
+250,22.711710
+315,16.609593
+400,11.691994
+500,11.607939
+630,5.595713
+800,0.523536
+1000,-1.294980
+1250,-4.835037
+1600,-4.766262
+2000,-6.830910
+2500,-13.126289
+3150,-16.575608
+4000,-20.701726
+5000,-23.624338
+6300,-25.094971
+8000,-26.021692
+10000,-34.820543
+12500,-44.565892
+16000,-55.136797
+20000,-62.531798

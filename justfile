@@ -1,6 +1,9 @@
 set shell := ["bash", "-uc"]
 
 export GOPRIVATE := "github.com/cwbudde"
+typst_version := "0.15.0"
+paper_source := "docs/paper/paper.typ"
+paper_output := "docs/paper/mixed-phase-filter-design-en.pdf"
 
 # Default recipe - show available commands
 default:
@@ -31,6 +34,15 @@ check-tidy:
 test:
     go test -v ./...
 
+# Check the iterative-design golden result in native and JavaScript/WASM builds
+test-cross-build:
+    ./scripts/test-cross-build.sh
+
+# Check URL state and exercise the WebAssembly lab in a headless browser
+test-web: web-wasm
+    node --test web/lab-state.test.mjs
+    ./scripts/test-web.sh
+
 # Run tests with race detector
 test-race:
     go test -race ./...
@@ -48,17 +60,40 @@ bench:
 bench-ci:
     go test -run='^$' -bench='BenchmarkDesign' -benchmem -count=1 ./mixedphase/ ./graphiceq/
 
-# Regenerate the comparison CSVs quoted in the docs
+# Regenerate the committed comparison CSVs quoted in the docs
 compare:
-    go run ./examples/mixedphase
-    go run ./examples/graphiceq
+    go run ./examples/mixedphase \
+        -document docs/MIXED_PHASE_FILTER_DESIGN.md \
+        > docs/reference-results.csv
+    go run ./examples/graphiceq > docs/graphiceq-results.csv
+
+# Verify the pinned paper compiler is available
+paper-check-tools:
+    @command -v typst >/dev/null || { echo "typst {{ typst_version }} is required"; exit 1; }
+    @version="$(./scripts/run-typst.sh --version | awk '{print $2}')"; \
+        test "$version" = "{{ typst_version }}" || { \
+            echo "typst {{ typst_version }} is required (found $version)"; \
+            exit 1; \
+        }
+
+# Build the revised English paper from committed inputs
+paper: paper-check-tools
+    ./scripts/run-typst.sh compile --root . \
+        --input revision="$(git describe --always --dirty)" \
+        {{ paper_source }} {{ paper_output }}
+
+# Rebuild the paper whenever its Typst sources change
+paper-watch: paper-check-tools
+    ./scripts/run-typst.sh watch --root . \
+        --input revision="working-tree" \
+        {{ paper_source }} {{ paper_output }}
 
 # Run all checks (formatting, linting, tests, tidiness)
-ci: check-formatted test lint check-tidy
+ci: check-formatted test test-cross-build test-web lint check-tidy
 
 # Clean build artifacts
 clean:
-    rm -f coverage.out coverage.html
+    rm -f coverage.out coverage.html {{ paper_output }}
 
 # Build the Mixed Phase Lab Go/WASM assets
 web-wasm:
@@ -66,8 +101,8 @@ web-wasm:
 
 # Run the local Mixed Phase Lab
 web-demo port="8787": web-wasm
-    @echo "Serving Mixed Phase Lab at http://localhost:{{port}}"
-    python3 -m http.server {{port}} -d web
+    @echo "Serving Mixed Phase Lab at http://localhost:{{ port }}"
+    python3 -m http.server {{ port }} -d web
 
 fix:
     just lint-fix

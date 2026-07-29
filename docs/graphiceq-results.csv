@@ -1,0 +1,10 @@
+method,iir_bands,taps,latency,rms_error_db,max_error_db
+hybrid,0,3073,1536,0.014209,0.579788
+hybrid,1,1537,768,0.016223,0.602629
+all-fir-equal-latency,0,1537,768,0.048663,1.116730
+hybrid,2,769,384,0.024067,0.477574
+all-fir-equal-latency,0,769,384,0.113490,2.665199
+hybrid,3,385,192,0.047841,0.774018
+all-fir-equal-latency,0,385,192,0.241559,4.471609
+hybrid,4,193,96,0.067921,0.914112
+all-fir-equal-latency,0,193,96,0.297357,4.625830

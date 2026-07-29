@@ -3,97 +3,436 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mixed Phase Lab</title>
+    <meta
+      name="description"
+      content="Compare mixed-phase FIR designs under the same target and tap budget."
+    />
+    <title>Mixed Phase Lab — FIR comparison workbench</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230b0e0d'/%3E%3Cpath d='M5 18h4l2-10 4 18 3-14 3 9 2-5h4' fill='none' stroke='%2359d8d1' stroke-width='2'/%3E%3C/svg%3E"
+    />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header>
-      <h1>Mixed Phase Lab</h1>
-      <p>
-        Every filter spends its delay budget somewhere. Move the delay control and watch
-        where the energy goes — into pre-ringing ahead of the peak, or into phase
-        distortion around it.
-        <a href="https://github.com/cwbudde/algo-mixedphase">algo-mixedphase</a>
+    <a class="skip-link" href="#analysis">Skip to analysis</a>
+
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">
+          FIR comparison workbench <span>Go · WebAssembly</span>
+        </p>
+        <h1>Mixed Phase <i>Lab</i></h1>
+      </div>
+      <p class="lede">
+        Hold the target and tap budget still. Change the phase strategy. See—and
+        hear—where each filter spends its delay.
       </p>
+      <a
+        class="repository-link"
+        href="https://github.com/cwbudde/algo-mixedphase"
+        aria-label="Open algo-mixedphase on GitHub"
+      >
+        Source <span aria-hidden="true">↗</span>
+      </a>
     </header>
 
     <main>
-      <section class="controls" aria-label="Design controls">
-        <label>
-          Method
-          <select id="method">
-            <option value="iterative">Alternating factorisation (DAGA 2012)</option>
-            <option value="interpolation">Phase interpolation</option>
-            <option value="minimax">Complex least squares + minimax</option>
-            <option value="lowdelay">Low group delay (magnitude-constrained)</option>
-          </select>
-        </label>
+      <section class="experiment-panel" aria-labelledby="experiment-title">
+        <div class="section-heading">
+          <div>
+            <p class="step-label">01 / Experiment</p>
+            <h2 id="experiment-title">Fix the common ground</h2>
+          </div>
+          <p id="presetDescription" class="section-note"></p>
+        </div>
 
-        <label>
-          Taps <output id="lengthValue">129</output>
-          <input id="length" type="range" min="33" max="257" step="8" value="129" />
-        </label>
+        <div class="common-controls">
+          <label class="select-field preset-field">
+            <span>Experiment preset</span>
+            <select id="preset"></select>
+          </label>
 
-        <label>
-          Cutoff <output id="cutoffValue">0.08</output>
-          <input id="cutoff" type="range" min="0.02" max="0.4" step="0.01" value="0.08" />
-        </label>
+          <label class="range-field">
+            <span>
+              Tap budget
+              <output id="lengthValue" for="length">129</output>
+            </span>
+            <input
+              id="length"
+              type="range"
+              min="33"
+              max="257"
+              step="8"
+              value="129"
+            />
+            <small><span>33</span><span>257 taps</span></small>
+          </label>
 
-        <label data-for="delay">
-          Delay (samples) <output id="delayValue">8</output>
-          <input id="delay" type="range" min="0" max="64" step="1" value="8" />
-        </label>
+          <label class="range-field">
+            <span>
+              Normalised cutoff
+              <output id="cutoffValue" for="cutoff">0.08</output>
+            </span>
+            <input
+              id="cutoff"
+              type="range"
+              min="0.02"
+              max="0.4"
+              step="0.01"
+              value="0.08"
+            />
+            <small><span>0.02</span><span>0.40 × fs</span></small>
+          </label>
+        </div>
 
-        <label data-for="tolerance" hidden>
-          Magnitude tolerance (dB) <output id="toleranceValue">1</output>
-          <input
-            id="tolerance"
-            type="range"
-            min="0.1"
-            max="12"
-            step="0.1"
-            value="1"
-          />
-        </label>
+        <div class="comparison-controls">
+          <article class="design-control design-a" data-slot="a">
+            <div class="design-heading">
+              <div>
+                <span class="design-token" aria-hidden="true">A</span>
+                <div>
+                  <p>Reference design</p>
+                  <h3 id="aName">Alternating factorisation</h3>
+                </div>
+              </div>
+              <span id="aStatus" class="design-status" role="status"
+                >Loading</span
+              >
+            </div>
 
-        <label>
-          Iterations <output id="iterationsValue">12</output>
-          <input id="iterations" type="range" min="1" max="120" step="1" value="12" />
-        </label>
+            <label class="select-field">
+              <span>Method</span>
+              <select id="aMethod" data-slot="a" data-field="method"></select>
+            </label>
+
+            <label class="range-field" data-slot-control="a-delay">
+              <span>
+                Delay
+                <output id="aDelayValue" for="aDelay">8 samples</output>
+              </span>
+              <input
+                id="aDelay"
+                data-slot="a"
+                data-field="delay"
+                type="range"
+                min="0"
+                max="64"
+                step="1"
+                value="8"
+              />
+              <small><span>minimum phase</span><span>linear phase</span></small>
+            </label>
+
+            <label class="range-field" data-slot-control="a-tolerance" hidden>
+              <span>
+                Magnitude tolerance
+                <output id="aToleranceValue" for="aTolerance">1.0 dB</output>
+              </span>
+              <input
+                id="aTolerance"
+                data-slot="a"
+                data-field="tolerance"
+                type="range"
+                min="0.1"
+                max="12"
+                step="0.1"
+                value="1"
+              />
+              <small><span>strict</span><span>more delay freedom</span></small>
+            </label>
+
+            <details>
+              <summary>Optimiser budget</summary>
+              <label class="range-field compact">
+                <span>
+                  Maximum iterations
+                  <output id="aIterationsValue" for="aIterations">12</output>
+                </span>
+                <input
+                  id="aIterations"
+                  data-slot="a"
+                  data-field="iterations"
+                  type="range"
+                  min="1"
+                  max="120"
+                  step="1"
+                  value="12"
+                />
+              </label>
+            </details>
+
+            <button
+              class="text-button copy-design"
+              data-copy-from="a"
+              type="button"
+            >
+              Copy A settings to B <span aria-hidden="true">→</span>
+            </button>
+          </article>
+
+          <button id="swapDesigns" class="swap-button" type="button">
+            <span aria-hidden="true">⇄</span>
+            <span>Swap</span>
+          </button>
+
+          <article class="design-control design-b" data-slot="b">
+            <div class="design-heading">
+              <div>
+                <span class="design-token" aria-hidden="true">B</span>
+                <div>
+                  <p>Candidate design</p>
+                  <h3 id="bName">Phase interpolation</h3>
+                </div>
+              </div>
+              <span id="bStatus" class="design-status" role="status"
+                >Loading</span
+              >
+            </div>
+
+            <label class="select-field">
+              <span>Method</span>
+              <select id="bMethod" data-slot="b" data-field="method"></select>
+            </label>
+
+            <label class="range-field" data-slot-control="b-delay">
+              <span>
+                Delay
+                <output id="bDelayValue" for="bDelay">8 samples</output>
+              </span>
+              <input
+                id="bDelay"
+                data-slot="b"
+                data-field="delay"
+                type="range"
+                min="0"
+                max="64"
+                step="1"
+                value="8"
+              />
+              <small><span>minimum phase</span><span>linear phase</span></small>
+            </label>
+
+            <label class="range-field" data-slot-control="b-tolerance" hidden>
+              <span>
+                Magnitude tolerance
+                <output id="bToleranceValue" for="bTolerance">1.0 dB</output>
+              </span>
+              <input
+                id="bTolerance"
+                data-slot="b"
+                data-field="tolerance"
+                type="range"
+                min="0.1"
+                max="12"
+                step="0.1"
+                value="1"
+              />
+              <small><span>strict</span><span>more delay freedom</span></small>
+            </label>
+
+            <details>
+              <summary>Optimiser budget</summary>
+              <label class="range-field compact">
+                <span>
+                  Maximum iterations
+                  <output id="bIterationsValue" for="bIterations">12</output>
+                </span>
+                <input
+                  id="bIterations"
+                  data-slot="b"
+                  data-field="iterations"
+                  type="range"
+                  min="1"
+                  max="120"
+                  step="1"
+                  value="12"
+                />
+              </label>
+            </details>
+
+            <button
+              class="text-button copy-design"
+              data-copy-from="b"
+              type="button"
+            >
+              <span aria-hidden="true">←</span> Copy B settings to A
+            </button>
+          </article>
+        </div>
       </section>
 
-      <section class="metrics" aria-label="Metrics">
-        <dl>
-          <div><dt>RMS magnitude error</dt><dd id="rms">–</dd></div>
-          <div><dt>Peak magnitude error</dt><dd id="peak">–</dd></div>
-          <div><dt>Energy centroid</dt><dd id="centroid">–</dd></div>
-          <div><dt>Energy before peak</dt><dd id="prepeak">–</dd></div>
-          <div><dt>Iterations run</dt><dd id="iterationsRun">–</dd></div>
-        </dl>
+      <section class="audition-panel" aria-labelledby="audition-title">
+        <div class="audition-copy">
+          <span class="play-glyph" aria-hidden="true">▶</span>
+          <div>
+            <p class="step-label">02 / Audition</p>
+            <h2 id="audition-title">Listen ahead of the peak</h2>
+            <p>
+              A deterministic transient loop feeds all three paths at once.
+              Switching does not restart the timeline.
+            </p>
+          </div>
+        </div>
+
+        <div class="transport">
+          <button id="playAudio" class="primary-button" type="button" disabled>
+            Play transient
+          </button>
+          <div
+            class="audition-switch"
+            role="group"
+            aria-label="Audition signal"
+          >
+            <button type="button" data-audition="source" aria-pressed="false">
+              Source
+            </button>
+            <button type="button" data-audition="a" aria-pressed="true">
+              A
+            </button>
+            <button type="button" data-audition="b" aria-pressed="false">
+              B
+            </button>
+          </div>
+          <p id="audioStatus" class="transport-status" role="status">
+            Waiting for both designs
+          </p>
+        </div>
       </section>
 
-      <section class="plots">
-        <figure>
-          <figcaption>Magnitude (dB) — design in colour, prototype dashed</figcaption>
-          <canvas id="magnitude" width="900" height="260"></canvas>
-        </figure>
-        <figure>
-          <figcaption>Group delay (samples)</figcaption>
-          <canvas id="groupDelay" width="900" height="200"></canvas>
-        </figure>
-        <figure>
-          <figcaption>
-            Impulse response — the bar marks the peak; everything left of it is
-            pre-ringing
-          </figcaption>
-          <canvas id="impulse" width="900" height="200"></canvas>
-        </figure>
-      </section>
+      <div id="analysis" class="analysis-layout">
+        <section class="plots" aria-labelledby="analysis-title">
+          <div class="section-heading analysis-heading">
+            <div>
+              <p class="step-label">03 / Analysis</p>
+              <h2 id="analysis-title">Read the trade-off</h2>
+            </div>
+            <div class="plot-legend" aria-label="Plot legend">
+              <span class="legend-target">Target</span>
+              <span class="legend-a">A</span>
+              <span class="legend-b">B</span>
+            </div>
+          </div>
 
-      <p id="status" role="status">Loading WebAssembly…</p>
+          <figure>
+            <figcaption>
+              <div>
+                <strong>Magnitude response</strong>
+                <span>Realised response · dB</span>
+              </div>
+              <span
+                id="magnitudeReadout"
+                class="cursor-readout"
+                aria-live="off"
+              ></span>
+            </figcaption>
+            <canvas
+              id="magnitude"
+              tabindex="0"
+              aria-label="Magnitude response comparison from DC to Nyquist"
+            ></canvas>
+          </figure>
+
+          <figure>
+            <figcaption>
+              <div>
+                <strong>Group delay</strong>
+                <span>Hidden below −60 dB, where phase is not meaningful</span>
+              </div>
+              <span
+                id="delayReadout"
+                class="cursor-readout"
+                aria-live="off"
+              ></span>
+            </figcaption>
+            <canvas
+              id="groupDelay"
+              tabindex="0"
+              aria-label="Group-delay comparison over normalised frequency"
+            ></canvas>
+          </figure>
+
+          <figure>
+            <figcaption>
+              <div>
+                <strong>Peak-aligned impulse &amp; cumulative energy</strong>
+                <span>Shaded samples arrive before each filter’s peak</span>
+              </div>
+              <span
+                id="impulseReadout"
+                class="cursor-readout"
+                aria-live="off"
+              ></span>
+            </figcaption>
+            <canvas
+              id="impulse"
+              tabindex="0"
+              aria-label="Peak-aligned impulse responses with cumulative energy"
+            ></canvas>
+          </figure>
+        </section>
+
+        <aside class="comparison-summary" aria-labelledby="summary-title">
+          <div class="summary-heading">
+            <div>
+              <p class="step-label">Live comparison</p>
+              <h2 id="summary-title">A <span>versus</span> B</h2>
+            </div>
+            <span id="globalStatus" class="live-indicator" role="status">
+              Starting engine
+            </span>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Metric</th>
+                <th scope="col" class="column-a">A</th>
+                <th scope="col" class="column-b">B</th>
+                <th scope="col">Δ B−A</th>
+              </tr>
+            </thead>
+            <tbody id="metricsBody"></tbody>
+          </table>
+
+          <p class="metric-note">
+            Lower is better for errors, delay, pre-peak energy, iterations, and
+            runtime. Runtime is measured in this browser and is not a
+            cross-machine benchmark.
+          </p>
+
+          <div class="export-actions">
+            <button id="copyLink" class="secondary-button" type="button">
+              Copy experiment link
+            </button>
+            <button
+              id="exportData"
+              class="secondary-button"
+              type="button"
+              disabled
+            >
+              Export taps + metrics
+            </button>
+            <button id="exportCSV" class="text-button" type="button" disabled>
+              Download plotted CSV <span aria-hidden="true">↓</span>
+            </button>
+          </div>
+        </aside>
+      </div>
     </main>
 
-    <script src="wasm_exec.js"></script>
-    <script src="app.js"></script>
+    <footer>
+      <p>
+        The plots evaluate the taps that would actually run. No design-grid
+        shortcuts.
+      </p>
+      <a
+        href="https://github.com/cwbudde/algo-mixedphase/blob/main/docs/MIXED_PHASE_FILTER_DESIGN.md"
+      >
+        Method notes
+      </a>
+    </footer>
+
+    <script type="module" src="app.js"></script>
   </body>
 </html>
