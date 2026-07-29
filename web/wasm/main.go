@@ -8,101 +8,67 @@ import (
 
 	"github.com/cwbudde/algo-mixedphase/graphiceq"
 	"github.com/cwbudde/algo-mixedphase/internal/labresponse"
-	"github.com/cwbudde/algo-mixedphase/mixedphase"
 )
 
 func main() {
 	api := js.Global().Get("Object").New()
 	api.Set("designMixedPhase", export(designMixedPhase))
 	api.Set("designGraphicEQ", export(designGraphicEQ))
+	api.Set("targets", targetNames())
 	js.Global().Set("mixedphaseLab", api)
 
 	select {}
 }
 
-// designMixedPhase designs a low-pass with the requested method and returns the
-// taps together with the plotted response.
+// targetNames publishes the accepted target names so that the page's own copy
+// of the list can be checked against the engine rather than trusted.
+func targetNames() js.Value {
+	names, err := labresponse.TargetNames()
+	if err != nil {
+		return js.Global().Get("Array").New(0)
+	}
+
+	out := js.Global().Get("Array").New(len(names))
+	for index, name := range names {
+		out.SetIndex(index, name)
+	}
+
+	return out
+}
+
+// designMixedPhase designs the requested target with the requested method and
+// returns the taps together with the plotted response.
 //
-// The single argument object carries: method, length, cutoff, delay,
-// toleranceDB and iterations.
+// The single argument object carries: method, target, length, cutoff, delay,
+// toleranceDB and iterations. cutoff applies only to the adjustable low-pass;
+// every other target is a fixed comparison fixture.
 func designMixedPhase(args []js.Value) any {
 	if len(args) < 1 {
 		return errorObject("missing request")
 	}
 
 	request := args[0]
-	length := intField(request, "length", 129)
-	cutoff := floatField(request, "cutoff", 0.08)
-	delay := intField(request, "delay", 0)
-	iterations := intField(request, "iterations", 12)
-	toleranceDB := floatField(request, "toleranceDB", 1)
 
-	// The lab is an untrusted boundary: a negative length would panic inside
-	// make and tear the WebAssembly instance down, and a single tap would
-	// divide by zero and emit NaN curves. Reject both here.
-	prototype, err := labresponse.LowpassPrototype(length, cutoff)
+	design, err := labresponse.Design(labresponse.Request{
+		Method:      stringField(request, "method", ""),
+		Target:      stringField(request, "target", labresponse.LowpassTarget),
+		Length:      intField(request, "length", 129),
+		Cutoff:      floatField(request, "cutoff", 0.08),
+		Delay:       intField(request, "delay", 0),
+		ToleranceDB: floatField(request, "toleranceDB", 1),
+		Iterations:  intField(request, "iterations", 12),
+	})
 	if err != nil {
 		return errorObject(err.Error())
 	}
 
-	maximumDelay := (length - 1) / 2
-	mix := 0.0
-
-	if maximumDelay > 0 {
-		mix = min(float64(delay)/float64(maximumDelay), 1)
-	}
-
-	var result mixedphase.Result
-
-	switch request.Get("method").String() {
-	case "iterative":
-		result, err = mixedphase.DesignIterative(prototype, mixedphase.IterativeConfig{
-			Length:     length,
-			Delay:      min(delay, maximumDelay),
-			Iterations: iterations,
-		})
-	case "interpolation":
-		result, err = mixedphase.DesignPhaseInterpolation(
-			prototype,
-			mixedphase.PhaseInterpolationConfig{Length: length, Mix: mix},
-		)
-	case "minimax":
-		result, err = mixedphase.DesignComplexLeastSquares(
-			prototype,
-			mixedphase.ComplexLeastSquaresConfig{
-				Length:            length,
-				Mix:               mix,
-				MinimaxIterations: iterations,
-			},
-		)
-	case "lowdelay":
-		result, err = mixedphase.DesignLowGroupDelay(
-			prototype,
-			// FFTSize is left at its default so that the grid always
-			// oversamples the requested length; a fixed size would be too
-			// coarse to measure against once the user asks for a long filter.
-			mixedphase.LowGroupDelayConfig{
-				Length:      length,
-				ToleranceDB: toleranceDB,
-				Iterations:  iterations,
-			},
-		)
-	default:
-		return errorObject("unknown method")
-	}
-
-	if err != nil {
-		return errorObject(err.Error())
-	}
-
-	response := labresponse.New(result.Taps)
-	reference := labresponse.New(prototype)
+	result := design.Result
 
 	out := js.Global().Get("Object").New()
 	out.Set("taps", floatArray(result.Taps))
-	out.Set("magnitudeDB", floatArray(response.MagnitudeDB))
-	out.Set("groupDelay", floatArray(response.GroupDelay))
-	out.Set("referenceMagnitudeDB", floatArray(reference.MagnitudeDB))
+	out.Set("magnitudeDB", floatArray(design.Realised.MagnitudeDB))
+	out.Set("groupDelay", floatArray(design.Realised.GroupDelay))
+	out.Set("referenceMagnitudeDB", floatArray(design.Prototype.MagnitudeDB))
 	out.Set("iterations", result.Iterations)
 	out.Set("rmsErrorDB", result.Metrics.RMSMagnitudeErrorDB)
 	out.Set("maxErrorDB", result.Metrics.MaxMagnitudeErrorDB)
@@ -198,4 +164,13 @@ func floatField(object js.Value, name string, fallback float64) float64 {
 	}
 
 	return value.Float()
+}
+
+func stringField(object js.Value, name, fallback string) string {
+	value := object.Get(name)
+	if value.Type() != js.TypeString {
+		return fallback
+	}
+
+	return value.String()
 }

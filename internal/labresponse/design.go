@@ -33,8 +33,8 @@ type Request struct {
 	Iterations  int
 }
 
-// Design is one completed lab design together with the curves the page draws.
-type Design struct {
+// Result is one completed lab design together with the curves the page draws.
+type Result struct {
 	Result mixedphase.Result
 
 	// Realised is evaluated from the returned taps, not from the design grid,
@@ -164,10 +164,10 @@ func mustTargetNames() []string {
 // budget reproduces the matching row of docs/reference-results.csv exactly. The
 // adjustable low-pass keeps its historical unweighted treatment so that URLs
 // shared before the comparison targets existed still recreate their design.
-func Design(request Request) (Design, error) {
+func Design(request Request) (Result, error) {
 	fixture, err := fixtureFor(request)
 	if err != nil {
-		return Design{}, err
+		return Result{}, err
 	}
 
 	length := request.Length
@@ -238,7 +238,7 @@ func Design(request Request) (Design, error) {
 			},
 		)
 	default:
-		return Design{}, fmt.Errorf(
+		return Result{}, fmt.Errorf(
 			"%w: %q; known methods are %v",
 			ErrUnknownMethod,
 			request.Method,
@@ -247,10 +247,10 @@ func Design(request Request) (Design, error) {
 	}
 
 	if err != nil {
-		return Design{}, err
+		return Result{}, err
 	}
 
-	return Design{
+	return Result{
 		Result:    result,
 		Realised:  New(result.Taps),
 		Prototype: New(fixture.prototype),
