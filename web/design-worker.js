@@ -26,7 +26,13 @@ async function instantiate() {
 
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if (globalThis.mixedphaseLab) {
-      postMessage({ type: "ready" });
+      // The engine's own target list travels with the ready message so the page
+      // can check its copy against it instead of trusting that the two lists
+      // were kept in step by hand.
+      postMessage({
+        type: "ready",
+        targets: [...(globalThis.mixedphaseLab.targets ?? [])],
+      });
       return;
     }
 

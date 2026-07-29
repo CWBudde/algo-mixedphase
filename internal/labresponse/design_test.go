@@ -185,20 +185,12 @@ var harnessEquivalent = map[string]Request{
 // with the same weights on the same grid, the agreement is bit-exact and is
 // asserted as such.
 //
-// Coverage is deliberately uneven: the alternating factorisation is checked on
-// every target, because every fixture has to be wired correctly, while the
-// remaining methods are checked on the two targets the paper plots. Running all
-// five methods on all six targets would double the package's test time for the
-// low-group-delay optimiser alone.
+// Every published row is checked, which also makes this the guard that the lab
+// still offers every target and every method the comparison publishes.
 func TestLabReproducesThePublishedComparison(t *testing.T) {
 	rows, err := reference.Run(0)
 	if err != nil {
 		t.Fatalf("reference.Run() error = %v", err)
-	}
-
-	broadlyChecked := []string{
-		reference.RepresentativeTarget,
-		reference.DegenerateContrastTarget,
 	}
 
 	for _, row := range rows {
@@ -209,10 +201,6 @@ func TestLabReproducesThePublishedComparison(t *testing.T) {
 					"covers the comparison it links to",
 				row.Method,
 			)
-		}
-
-		if row.Method != "budde-iterative" && !slices.Contains(broadlyChecked, row.Target) {
-			continue
 		}
 
 		t.Run(row.Target+"/"+row.Method, func(t *testing.T) {

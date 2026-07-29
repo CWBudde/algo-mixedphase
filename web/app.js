@@ -3,6 +3,7 @@ import {
   METHODS,
   PRESETS,
   RequestGate,
+  TARGETS,
   copyDesign,
   decodeExperiment,
   designRequest,
@@ -10,12 +11,17 @@ import {
   normaliseExperiment,
   presetExperiment,
   swapDesigns,
+  targetNote,
+  usesCutoff,
 } from "./lab-state.mjs";
 import { ComparisonPlots } from "./plots.mjs";
 
 const elements = {
   preset: document.getElementById("preset"),
   presetDescription: document.getElementById("presetDescription"),
+  target: document.getElementById("target"),
+  targetNote: document.getElementById("targetNote"),
+  cutoffControl: document.querySelector('[data-common-control="cutoff"]'),
   length: document.getElementById("length"),
   cutoff: document.getElementById("cutoff"),
   lengthValue: document.getElementById("lengthValue"),
@@ -125,6 +131,7 @@ const metricDefinitions = [
 let experiment = decodeExperiment(window.location.search);
 let results = { a: null, b: null };
 let engineReady = false;
+let engineTargets = [];
 const pending = new Set();
 const timers = { a: null, b: null };
 const gate = new RequestGate();
@@ -154,6 +161,10 @@ function populateOptions() {
     new Option("Custom experiment", "custom"),
   );
 
+  elements.target.replaceChildren(
+    ...Object.entries(TARGETS).map(([value, label]) => new Option(label, value)),
+  );
+
   for (const controls of Object.values(slots)) {
     controls.method.replaceChildren(
       ...Object.entries(METHODS).map(
@@ -173,10 +184,16 @@ function presetDescription() {
 function renderControls() {
   elements.preset.value = experiment.preset;
   elements.presetDescription.textContent = presetDescription();
+  elements.target.value = experiment.target;
+  elements.targetNote.textContent = targetNote(experiment.target);
   elements.length.value = experiment.length;
   elements.lengthValue.textContent = `${experiment.length} taps`;
   elements.cutoff.value = experiment.cutoff;
   elements.cutoffValue.textContent = experiment.cutoff.toFixed(2);
+  // Only the adjustable low-pass is rebuilt from the cutoff; leaving a live
+  // slider on a fixed benchmark prototype would invite the reading that it
+  // moved the target.
+  elements.cutoffControl.hidden = !usesCutoff(experiment.target);
 
   const maximumDelay = (experiment.length - 1) / 2;
   for (const [slot, controls] of Object.entries(slots)) {
@@ -341,6 +358,14 @@ function bindControls() {
     });
   }
 
+  elements.target.addEventListener("change", () => {
+    mutateExperiment(
+      { ...experiment, preset: "custom", target: elements.target.value },
+      ["a", "b"],
+      true,
+    );
+  });
+
   for (const [slot, controls] of Object.entries(slots)) {
     for (const [field, control] of [
       ["method", controls.method],
@@ -488,6 +513,7 @@ function bindExports() {
 worker.addEventListener("message", ({ data }) => {
   if (data.type === "ready") {
     engineReady = true;
+    engineTargets = data.targets ?? [];
     setGlobalStatus("computing", "Engine ready");
     const queued = pending.size ? [...pending] : ["a", "b"];
     pending.clear();
@@ -528,5 +554,11 @@ window.__mixedphaseLab = {
   },
   get results() {
     return structuredClone(results);
+  },
+  get targets() {
+    return Object.keys(TARGETS);
+  },
+  get engineTargets() {
+    return [...engineTargets];
   },
 };

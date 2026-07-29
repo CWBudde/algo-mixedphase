@@ -17,6 +17,25 @@ function tickValues(minimum, maximum, count) {
   );
 }
 
+// FREQUENCY_AXIS is shared by the magnitude and group-delay plots so their
+// crosshairs stay comparable. The lower bound is 48 Hz at a 48 kHz rate, which
+// is below every band the benchmark targets shape.
+const FREQUENCY_AXIS = Object.freeze({
+  xMin: 0.001,
+  xMax: 0.5,
+  xScale: "log",
+  xTicks: Object.freeze([0.001, 0.005, 0.02, 0.1, 0.5]),
+  xLabel: "normalised frequency",
+  xFormat: (value) => `${value}`,
+});
+
+// frequencyIndex maps a normalised frequency onto the uniform DC-to-Nyquist
+// grid the responses are evaluated on.
+function frequencyIndex(frequency, count) {
+  const position = Math.round((frequency / 0.5) * (count - 1));
+  return Math.min(Math.max(position, 0), Math.max(count - 1, 0));
+}
+
 function formatSigned(value, digits = 2) {
   if (!Number.isFinite(value)) {
     return "–";
@@ -125,9 +144,32 @@ export class ComparisonPlots {
 
   axes(
     frame,
-    { xMin, xMax, yMin, yMax, xTicks, yTicks, xLabel, xFormat, yFormat },
+    {
+      xMin,
+      xMax,
+      yMin,
+      yMax,
+      xTicks,
+      yTicks,
+      xLabel,
+      xFormat,
+      yFormat,
+      xScale = "linear",
+    },
   ) {
     const { context, left, top, width, height } = frame;
+    // Audio targets live in the bottom two decades: an 800 Hz crossover at
+    // 48 kHz sits at 0.017 of the sample rate, which a linear axis crushes
+    // against the y axis. Values at or below xMin — DC included — clamp onto the
+    // left edge rather than mapping to minus infinity.
+    const logarithmic = xScale === "log";
+    const logSpan = logarithmic ? Math.log(xMax / xMin) : 1;
+    const fractionOf = logarithmic
+      ? (value) => Math.log(Math.max(value, xMin) / xMin) / logSpan
+      : (value) => (value - xMin) / (xMax - xMin);
+    const valueAt = logarithmic
+      ? (fraction) => xMin * Math.exp(fraction * logSpan)
+      : (fraction) => xMin + fraction * (xMax - xMin);
     context.save();
     context.strokeStyle = this.colours.grid;
     context.fillStyle = this.colours.muted;
@@ -146,7 +188,7 @@ export class ComparisonPlots {
     }
 
     for (const tick of xTicks) {
-      const x = left + ((tick - xMin) / (xMax - xMin)) * width;
+      const x = left + fractionOf(tick) * width;
       context.beginPath();
       context.moveTo(x, top);
       context.lineTo(x, top + height);
@@ -158,12 +200,19 @@ export class ComparisonPlots {
 
     context.fillStyle = this.colours.faint;
     context.textAlign = "right";
-    context.fillText(xLabel, left + width, frame.canvasHeight - 5);
+    // The tick loop above leaves the baseline at "top", which would draw this
+    // label downwards from five pixels above the canvas edge and clip it.
+    context.textBaseline = "alphabetic";
+    context.fillText(xLabel, left + width, frame.canvasHeight - 4);
     context.restore();
 
     return {
-      x: (value) => left + ((value - xMin) / (xMax - xMin)) * width,
+      x: (value) => left + fractionOf(value) * width,
       y: (value) => top + height - ((value - yMin) / (yMax - yMin)) * height,
+
+      // valueAt inverts the axis so a crosshair position can be turned back
+      // into a frequency, which no longer equals its fraction of the frame.
+      valueAt,
     };
   }
 
@@ -230,16 +279,15 @@ export class ComparisonPlots {
   drawMagnitude() {
     const frame = this.prepare("magnitude");
     const yMin = -100;
-    const yMax = 5;
+    // The benchmark targets include a +9 dB parametric boost and a room
+    // correction reaching +12 dB, so the old +5 dB ceiling clipped the target
+    // curve itself rather than only a design's overshoot.
+    const yMax = 20;
     const mapping = this.axes(frame, {
-      xMin: 0,
-      xMax: 0.5,
+      ...FREQUENCY_AXIS,
       yMin,
       yMax,
-      xTicks: tickValues(0, 0.5, 6),
-      yTicks: [-100, -80, -60, -40, -20, 0],
-      xLabel: "normalised frequency",
-      xFormat: (value) => value.toFixed(1),
+      yTicks: [-100, -80, -60, -40, -20, 0, 20],
       yFormat: (value) => `${value}`,
     });
 
@@ -284,12 +332,12 @@ export class ComparisonPlots {
       this.results.a?.magnitudeDB.length ??
       this.results.b?.magnitudeDB.length ??
       1;
-    const index = Math.round(this.crosshair * (count - 1));
-    const frequency = this.crosshair * 0.5;
+    const frequency = mapping.valueAt(this.crosshair);
+    const index = frequencyIndex(frequency, count);
     const a = this.results.a?.magnitudeDB[index];
     const b = this.results.b?.magnitudeDB[index];
     this.readouts.magnitude.textContent =
-      `${frequency.toFixed(3)} × fs · A ${a?.toFixed(2) ?? "–"} dB · ` +
+      `${frequency.toFixed(4)} × fs · A ${a?.toFixed(2) ?? "–"} dB · ` +
       `B ${b?.toFixed(2) ?? "–"} dB`;
   }
 
@@ -299,14 +347,10 @@ export class ComparisonPlots {
     const yMin = -Math.max(8, maximumDelay * 0.25);
     const yMax = Math.max(16, maximumDelay * 1.25);
     const mapping = this.axes(frame, {
-      xMin: 0,
-      xMax: 0.5,
+      ...FREQUENCY_AXIS,
       yMin,
       yMax,
-      xTicks: tickValues(0, 0.5, 6),
       yTicks: tickValues(yMin, yMax, 6),
-      xLabel: "normalised frequency",
-      xFormat: (value) => value.toFixed(1),
       yFormat: (value) => value.toFixed(0),
     });
 
@@ -352,8 +396,8 @@ export class ComparisonPlots {
       this.results.a?.groupDelay.length ??
       this.results.b?.groupDelay.length ??
       1;
-    const index = Math.round(this.crosshair * (count - 1));
-    const frequency = this.crosshair * 0.5;
+    const frequency = mapping.valueAt(this.crosshair);
+    const index = frequencyIndex(frequency, count);
     const a =
       (this.results.a?.magnitudeDB[index] ?? -Infinity) > -60
         ? this.results.a?.groupDelay[index]
@@ -363,7 +407,7 @@ export class ComparisonPlots {
         ? this.results.b?.groupDelay[index]
         : undefined;
     this.readouts.delay.textContent =
-      `${frequency.toFixed(3)} × fs · A ${a?.toFixed(2) ?? "masked"} · ` +
+      `${frequency.toFixed(4)} × fs · A ${a?.toFixed(2) ?? "masked"} · ` +
       `B ${b?.toFixed(2) ?? "masked"} samples`;
   }
 

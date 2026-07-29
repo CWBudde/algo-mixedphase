@@ -25,6 +25,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Mixed Phase Lab: a target selector offering the six fixed fixtures from the published
+  comparison alongside the adjustable low-pass. A benchmark target is driven on the harness
+  grid with the harness weights, so at 129 taps and 16 samples of delay the lab reproduces
+  its row of `docs/reference-results.csv` bit-for-bit; a new test asserts that across all
+  thirty rows. Two presets open on the support-starved crossover and on the degenerate case
+  it is read against. The magnitude and group-delay plots moved to a logarithmic frequency
+  axis, without which an 800 Hz crossover at 48 kHz occupies the leftmost two percent of
+  the frame, and the magnitude ceiling rose from +5 to +20 dB so that a boosting target is
+  no longer clipped.
+
 - `mixedphase`: fixed-length mixed-phase FIR design.
   - `DesignIterative` — alternating minimum-phase/linear-phase factorisation (DAGA 2012).
   - `DesignPhaseInterpolation` — direct complex-target baseline.

@@ -53,6 +53,12 @@
             <select id="preset"></select>
           </label>
 
+          <label class="select-field target-field">
+            <span>Target response</span>
+            <select id="target"></select>
+            <small id="targetNote" class="field-note"></small>
+          </label>
+
           <label class="range-field">
             <span>
               Tap budget
@@ -69,7 +75,7 @@
             <small><span>33</span><span>257 taps</span></small>
           </label>
 
-          <label class="range-field">
+          <label class="range-field" data-common-control="cutoff">
             <span>
               Normalised cutoff
               <output id="cutoffValue" for="cutoff">0.08</output>

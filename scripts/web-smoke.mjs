@@ -111,6 +111,51 @@ assert.deepEqual(initial, {
   noOverflow: true,
 });
 
+// The page validates a shared URL before the engine loads, so it keeps its own
+// copy of the target list. A copy that has drifted from the engine's would offer
+// a target that fails to design, or hide one that works.
+const targetLists = JSON.parse(
+  await evaluate(`JSON.stringify({
+    page: window.__mixedphaseLab.targets,
+    engine: window.__mixedphaseLab.engineTargets
+  })`),
+);
+assert.deepEqual(
+  targetLists.page,
+  targetLists.engine,
+  "the page's target list has drifted from the WebAssembly engine's",
+);
+assert.ok(targetLists.engine.length > 1, "the engine published no benchmark targets");
+
+for (const target of targetLists.engine) {
+  await evaluate(`(() => {
+    const select = document.querySelector("#target");
+    select.value = ${JSON.stringify(target)};
+    select.dispatchEvent(new Event("change"));
+  })()`);
+  await waitFor("document.body.dataset.ready === 'true'", `designs for ${target}`);
+
+  const selected = JSON.parse(
+    await evaluate(`JSON.stringify({
+      target: window.__mixedphaseLab.experiment.target,
+      status: document.querySelector("#globalStatus").dataset.state,
+      metricsComplete: !document.querySelector("#metricsBody").textContent.includes("…"),
+      cutoffHidden: document.querySelector('[data-common-control="cutoff"]').hidden,
+      url: window.location.search
+    })`),
+  );
+
+  assert.equal(selected.target, target);
+  assert.equal(selected.status, "ready", `${target} did not design cleanly`);
+  assert.equal(selected.metricsComplete, true, `${target} left metrics blank`);
+  assert.equal(
+    selected.cutoffHidden,
+    target !== "lowpass",
+    `${target} shows the wrong cutoff control`,
+  );
+  assert.match(selected.url, new RegExp(`target=${target}`));
+}
+
 await evaluate(`document.querySelector("#swapDesigns").click()`);
 await waitFor("document.body.dataset.ready === 'false'", "swap invalidation");
 await waitFor("document.body.dataset.ready === 'true'", "swapped designs");

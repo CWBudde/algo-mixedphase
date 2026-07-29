@@ -108,8 +108,10 @@ Redesign:
 - [x] Add shareable experiment presets, encode the complete experiment in the URL, and
       provide exports for taps and plotted data so a browser result can be reproduced in a
       test, notebook, or bug report.
-- [ ] Import the additional target presets from Phase 3 once its common benchmark fixtures
-      exist.
+- [x] Import the additional target presets from Phase 3 once its common benchmark fixtures
+      exist. All six live behind a target selector; a benchmark target is driven on the
+      harness grid with the harness weights, so at the published budgets the lab reproduces
+      its row of `docs/reference-results.csv` bit-for-bit.
 - [x] Move design work off the UI thread, debounce live controls, and discard stale
       results. Preserve keyboard operation, visible focus, reduced-motion preferences, and
       a useful single-column layout on small screens.

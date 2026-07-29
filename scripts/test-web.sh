@@ -18,7 +18,14 @@ cleanup() {
 		kill "$SERVER_PID" 2>/dev/null || true
 		wait "$SERVER_PID" 2>/dev/null || true
 	fi
-	rm -rf "$TEMP_DIR"
+	# Chrome's helper processes are not ours to wait on, and they may still be
+	# flushing the profile when the parent exits. A single rm loses that race
+	# often enough to fail an otherwise passing run.
+	for _ in 1 2 3 4 5; do
+		rm -rf "$TEMP_DIR" 2>/dev/null && return
+		sleep 0.2
+	done
+	rm -rf "$TEMP_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT HUP INT TERM
 

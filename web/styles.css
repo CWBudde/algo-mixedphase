@@ -216,7 +216,9 @@ main {
 
 .common-controls {
   display: grid;
-  grid-template-columns: minmax(240px, 1.25fr) 1fr 1fr;
+  /* Four controls, one of which is hidden for every fixed benchmark target, so
+     the row has to reflow rather than leave a gap where the cutoff was. */
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 2rem;
   padding: 1.25rem 1.4rem;
   border: 1px solid var(--rule);
@@ -258,6 +260,17 @@ select {
   color: var(--ink);
   font-size: 0.82rem;
   appearance: none;
+}
+
+.field-note {
+  display: block;
+  max-width: 40ch;
+  margin-top: 0.45rem;
+  color: var(--faint);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .range-field {

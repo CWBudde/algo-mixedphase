@@ -5,8 +5,46 @@ export const METHODS = Object.freeze({
   lowdelay: "Magnitude-constrained low delay",
 });
 
+// LOWPASS_TARGET is the lab's own fixture and the only one whose shape the
+// cutoff slider controls. Every other entry is a fixed comparison target taken
+// from the published benchmark, so selecting one at the published tap and delay
+// budget reproduces a row of docs/reference-results.csv.
+export const LOWPASS_TARGET = "lowpass";
+
+// TARGETS must list exactly what the WebAssembly engine accepts. The page needs
+// its own copy because a shared URL is validated before the engine has loaded;
+// the browser smoke test compares this list against mixedphaseLab.targets so
+// the two cannot drift apart silently.
+export const TARGETS = Object.freeze({
+  [LOWPASS_TARGET]: "Adjustable low-pass",
+  "low-pass": "Benchmark: first-order low-pass, 1 kHz",
+  "parametric-eq": "Benchmark: parametric EQ, +9 dB at 3 kHz",
+  crossover: "Benchmark: LR4 crossover, 2 kHz",
+  "deep-notch": "Benchmark: −60 dB notch, 6 kHz",
+  "room-correction": "Benchmark: room correction",
+  "steep-crossover": "Benchmark: LR8 crossover, 800 Hz",
+});
+
+// The benchmark fixtures are 257-tap prototypes sampled at 48 kHz, so a
+// normalised frequency f on the plots is f × 48 kHz. Only the adjustable
+// low-pass is rebuilt from the tap budget and cutoff.
+export const TARGET_NOTE = Object.freeze({
+  [LOWPASS_TARGET]: "Hann-windowed sinc, rebuilt from the tap budget and cutoff.",
+  default:
+    "Fixed benchmark prototype: 257 taps at 48 kHz. The cutoff does not apply.",
+});
+
+export function targetNote(target) {
+  return TARGET_NOTE[target] ?? TARGET_NOTE.default;
+}
+
+export function usesCutoff(target) {
+  return target === LOWPASS_TARGET;
+}
+
 export const DEFAULT_EXPERIMENT = Object.freeze({
   preset: "daga-interpolation",
+  target: LOWPASS_TARGET,
   length: 129,
   cutoff: 0.08,
   a: Object.freeze({
@@ -38,6 +76,7 @@ export const PRESETS = Object.freeze([
       "The same magnitude response at opposite ends of the delay budget.",
     experiment: {
       preset: "delay-extremes",
+      target: LOWPASS_TARGET,
       length: 129,
       cutoff: 0.08,
       a: { method: "interpolation", delay: 0, tolerance: 1, iterations: 12 },
@@ -51,6 +90,7 @@ export const PRESETS = Object.freeze([
       "One Lawson pass against a larger peak-error refinement budget.",
     experiment: {
       preset: "minimax-budget",
+      target: LOWPASS_TARGET,
       length: 129,
       cutoff: 0.08,
       a: { method: "minimax", delay: 8, tolerance: 1, iterations: 1 },
@@ -63,10 +103,39 @@ export const PRESETS = Object.freeze([
     description: "Prescribed delay against a magnitude-constrained optimiser.",
     experiment: {
       preset: "low-delay",
+      target: LOWPASS_TARGET,
       length: 129,
       cutoff: 0.08,
       a: { method: "iterative", delay: 8, tolerance: 1, iterations: 12 },
       b: { method: "lowdelay", delay: 8, tolerance: 1, iterations: 60 },
+    },
+  },
+  {
+    id: "support-starved",
+    label: "Support-starved crossover",
+    description:
+      "The one benchmark target whose minimum-phase factor does not fit its tap share. At these settings both designs reproduce their published rows.",
+    experiment: {
+      preset: "support-starved",
+      target: "steep-crossover",
+      length: 129,
+      cutoff: 0.08,
+      a: { method: "iterative", delay: 16, tolerance: 1, iterations: 12 },
+      b: { method: "interpolation", delay: 16, tolerance: 1, iterations: 12 },
+    },
+  },
+  {
+    id: "degeneracy",
+    label: "Degeneracy check",
+    description:
+      "The same method with and without its delay budget. On a target the minimum-phase factor already fits, the two coincide up to that delay — which is what the budget bought.",
+    experiment: {
+      preset: "degeneracy",
+      target: "crossover",
+      length: 129,
+      cutoff: 0.08,
+      a: { method: "iterative", delay: 16, tolerance: 1, iterations: 12 },
+      b: { method: "iterative", delay: 0, tolerance: 1, iterations: 12 },
     },
   },
 ]);
@@ -129,6 +198,9 @@ export function normaliseExperiment(candidate = {}) {
     preset: PRESETS.some(({ id }) => id === candidate.preset)
       ? candidate.preset
       : "custom",
+    target: Object.hasOwn(TARGETS, candidate.target)
+      ? candidate.target
+      : DEFAULT_EXPERIMENT.target,
     length,
     cutoff: numberWithin(
       candidate.cutoff,
@@ -153,6 +225,7 @@ export function decodeExperiment(search) {
 
   return normaliseExperiment({
     preset: parameters.get("preset") ?? "custom",
+    target: parameters.get("target"),
     length: parameters.get("length"),
     cutoff: parameters.get("cutoff"),
     a: {
@@ -174,6 +247,7 @@ export function encodeExperiment(experiment) {
   const state = normaliseExperiment(experiment);
   const parameters = new URLSearchParams({
     preset: state.preset,
+    target: state.target,
     length: String(state.length),
     cutoff: state.cutoff.toFixed(3).replace(/0+$/, "").replace(/\.$/, ""),
     aMethod: state.a.method,
@@ -216,6 +290,7 @@ export function designRequest(experiment, slot) {
 
   return {
     method: design.method,
+    target: state.target,
     length: state.length,
     cutoff: state.cutoff,
     delay: design.delay,
