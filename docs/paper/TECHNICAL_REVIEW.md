@@ -50,10 +50,12 @@ dependencies are used through their exported APIs.
 
 ## Quantitative evidence audit
 
-The paper's result table, five cross-target summary counts, and all six charts
-read the committed CSVs directly. The manuscript stores configuration budgets
-and mathematical constants, but no measured result value. The evidence paths
-are:
+The paper's result table, five cross-target summary counts, and all six
+quantitative charts read the committed CSVs directly. The additional
+signal-flow figure is a qualitative redrawing of Figures 2 and 3 in the
+original paper; it adds the revision's exact convolution-support notation but
+no measured value. The manuscript stores configuration budgets and
+mathematical constants, but no measured result value. The evidence paths are:
 
 - `docs/reference-results.csv` for cross-target scalar metrics;
 - `docs/reference-response.csv` and `docs/reference-impulse.csv` for the

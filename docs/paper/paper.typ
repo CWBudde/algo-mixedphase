@@ -2,6 +2,7 @@
   accuracy-delay-chart, cross-target-summary-table, cross-target-win-count,
   graphiceq-chart, group-delay-response-chart, magnitude-response-chart,
   peak-aligned-impulse-chart, pre-ringing-chart, representative-results-table,
+  signal-flow-diagram,
 )
 #import "style.typ": code-path, paper
 
@@ -137,6 +138,24 @@ $ N_B = 2 d + 1, quad N_A = N - N_B + 1. $ <support-split>
 Thus $d = 0$ yields the minimum-phase endpoint and
 $d = (N - 1) / 2$ yields the linear-phase endpoint without changing the final
 tap count.
+
+#figure(
+  signal-flow-diagram(),
+  caption: [
+    Signal-flow comparison redrawn in the simple block style of the original
+    paper's Figures 2 and 3 @budde2012. The 2012 construction replaces the
+    motivating minimum-phase IIR bank with the finite minimum-phase factor
+    $a[n]$ and cascades it with the linear-phase factor $b[n]$. The two FIR
+    blocks may be convolved into the single mixed-phase response $h[n]$ that
+    runs.
+  ],
+) <factor-signal-flow>
+
+@factor-signal-flow makes the support and delay roles explicit: only
+the symmetric factor $b[n]$ spends samples before its centre, while $a[n]$
+concentrates its energy causally. The diagram is structural; the realised
+response and all reported metrics are computed from the convolved $N$-tap
+filter.
 
 #figure(
   text(size: 7.5pt)[
@@ -475,17 +494,20 @@ behaviour is visible here and is not captured by a single mean value.
   caption: [
     Peak-aligned realised impulse responses for the same parametric-EQ designs
     and budgets as @representative-magnitude. Each 129-tap response is divided
-    by its own absolute peak; the horizontal origin is that peak, so the plot
-    compares temporal distribution rather than gain. Source:
+    by its own absolute peak and displayed as coefficient magnitude in dB,
+    with values below −80 dB clipped to the plot floor. This intentionally
+    discards coefficient sign so low-level temporal detail remains visible.
+    The horizontal origin is each response's peak, so the plot compares
+    temporal distribution rather than gain. Source:
     #code-path("docs/reference-impulse.csv").
   ],
 ) <representative-impulse>
 
 Peak alignment in @representative-impulse separates waveform shape from
-absolute latency. The three prescribed-phase solutions retain small
-coefficients before the peak; the optimised low-delay solution peaks at its
-first sample. The full unnormalised coefficients and peak indices remain in
-the committed CSV.
+absolute latency. The dB view reveals the three prescribed-phase solutions'
+low-level coefficients before the peak; the optimised low-delay solution peaks
+at its first sample. Coefficient signs, full unnormalised values, and peak
+indices remain in the committed CSV.
 
 #figure(
   text(size: 7.5pt)[
@@ -700,14 +722,17 @@ revision shown on the title page.
 #text(size: 8.15pt)[
   #set par(justify: false, leading: 0.42em)
 
-  - *@factor-convolution and @support-split; @api-notation.* _Source:_
+  - *@factor-convolution and @support-split; @factor-signal-flow;
+      @api-notation.* _Source:_
     #code-path("IterativeConfig"), #code-path("Result"), and
-    #code-path("mixedphase/iterative.go"). _Evidence:_
+    #code-path("mixedphase/iterative.go"). The qualitative signal-flow
+    comparison is redrawn by #code-path("signal-flow-diagram") from Figures 2
+    and 3 of @budde2012; it contains no measured data. _Evidence:_
     #code-path("TestDesignIterativeHonoursTapBudget"),
     #code-path("TestIterativeZeroDelayIsMinimumPhaseEndpoint"), and
     #code-path("TestIterativeMaximumDelayIsLinearPhaseEndpoint"). _Budget:_ all
     valid $0 <= d <= (N - 1) / 2$; the reference row uses $N=129$, $d=16$.
-    _Reproduce:_ `go test ./mixedphase`.
+    _Reproduce:_ `go test ./mixedphase`; rebuild with `just paper`.
 
   - *@accuracy-delay and @pre-ringing.* _Generator:_
     #code-path("examples/mixedphase") through
@@ -770,10 +795,11 @@ committed CSV fields directly.
 
 The comparison is limited to five fixed targets, one 129-tap output budget,
 and the stated optimiser budgets; it does not establish asymptotic convergence
-or perceptual preference. The original 2012 figures have not been reconstructed
-from machine-readable data. Perceptual evaluation is limited to objective
-pre-ringing and delay proxies; controlled listening tests are outside the
-present scope.
+or perceptual preference. The original signal-flow figures are redrawn only as
+a qualitative structural diagram; their response example has not been
+reconstructed because no machine-readable source data were published.
+Perceptual evaluation is limited to objective pre-ringing and delay proxies;
+controlled listening tests are outside the present scope.
 
 = Conclusion
 

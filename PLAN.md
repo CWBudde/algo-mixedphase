@@ -175,19 +175,21 @@ Build and publication:
       all imported Typst package versions used locally and in CI.
 - [x] Add a clean-checkout CI job that formats/checks the sources, compiles the paper, and
       uploads the PDF as an artifact.
-- [ ] Attach the CI-built PDF to tagged releases rather than relying on a manually committed
+- [x] Attach the CI-built PDF to tagged releases rather than relying on a manually committed
       binary.
-- [ ] Link the built paper from the repository README, the Mixed Phase Lab, and the
+- [x] Link the built paper from the repository README, the Mixed Phase Lab, and the
       implementation notes. Keep those links valid when browsing a tagged release.
 
 Exit criteria:
 
-- [ ] A clean checkout with the documented pinned toolchain builds the English PDF with
+- [x] A clean checkout with the documented pinned toolchain builds the English PDF with
       `just paper`, with no manually prepared figures or tables.
-- [ ] Every quantitative claim is traceable to a test or `just compare` artifact and states
+- [x] Every quantitative claim is traceable to a test or `just compare` artifact and states
       the exact design and optimiser budget that produced it.
-- [ ] The revised paper is technically reviewed against the German original, the Go
-      implementation, and the committed benchmark data, and its tagged PDF is downloadable.
+- [x] Technically review the revised paper against the German original, the Go
+      implementation, and the committed benchmark data.
+- [ ] After the Phase 6 version tag exists, verify that its CI-built PDF is downloadable
+      from the release asset URL. The workflow and durable links are already in place.
 
 ## Phase 6: Release (Planned)
 

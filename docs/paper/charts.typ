@@ -296,12 +296,21 @@
   if rows.len() == 0 {
     ""
   } else {
+    let amplitude-floor = 0.0001
     let points = rows
-      .map(row => (
-        number(x-position(float(row.at("peak_aligned_index")))),
-        ",",
-        number(y-position(float(row.at("normalised_coefficient")))),
-      ).join(""))
+      .map(row => {
+        let amplitude = calc.abs(float(row.at("normalised_coefficient")))
+        let level = if amplitude <= amplitude-floor {
+          -80
+        } else {
+          20 * log10(amplitude)
+        }
+        (
+          number(x-position(float(row.at("peak_aligned_index")))),
+          ",",
+          number(y-position(level)),
+        ).join("")
+      })
       .join(" ")
     let dash-attr = if dash == none {
       ""
@@ -324,12 +333,12 @@
   }
 }
 
-#let chart-image(body, definitions: "") = {
+#let svg-image(width, height, body, definitions: "") = {
   let svg = (
     "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 ",
-    str(chart-width),
+    str(width),
     " ",
-    str(chart-height),
+    str(height),
     "\"><rect width=\"100%\" height=\"100%\" fill=\"white\"/><defs>",
     definitions,
     "</defs>",
@@ -339,6 +348,131 @@
     .map(str)
     .join("")
   image(bytes(svg), format: "svg", width: 100%)
+}
+
+#let chart-image(body, definitions: "") = {
+  svg-image(
+    chart-width,
+    chart-height,
+    body,
+    definitions: definitions,
+  )
+}
+
+#let signal-flow-block(x, y, width, title, detail, fill: "#f1f3f5") = (
+  "<rect x=\"",
+  number(x),
+  "\" y=\"",
+  number(y),
+  "\" width=\"",
+  number(width),
+  "\" height=\"58\" rx=\"3\" fill=\"",
+  fill,
+  "\" stroke=\"",
+  ink,
+  "\" stroke-width=\"2\"/>",
+  svg-text(x + width / 2, y + 25, title, size: 16, weight: "bold"),
+  svg-text(x + width / 2, y + 45, detail, size: 15, fill: muted),
+)
+.map(str)
+.join("")
+
+#let signal-flow-arrow(x1, y, x2) = (
+  svg-line(x1, y, x2, y, width: 2),
+  "<polygon points=\"",
+  number(x2),
+  ",",
+  number(y),
+  " ",
+  number(x2 - 9),
+  ",",
+  number(y - 5),
+  " ",
+  number(x2 - 9),
+  ",",
+  number(y + 5),
+  "\" fill=\"",
+  ink,
+  "\"/>",
+)
+.map(str)
+.join("")
+
+#let signal-flow-diagram() = {
+  let body = (
+    svg-text(
+      18,
+      24,
+      "Earlier hybrid equaliser (a)",
+      anchor: "start",
+      size: 17,
+      fill: muted,
+      weight: "bold",
+    ),
+    svg-text(52, 77, "Input", size: 16),
+    signal-flow-arrow(79, 72, 126),
+    signal-flow-block(
+      126,
+      43,
+      190,
+      "Minimum-phase IIR",
+      "filter bank",
+    ),
+    signal-flow-arrow(316, 72, 365),
+    signal-flow-block(
+      365,
+      43,
+      190,
+      "Linear-phase FIR",
+      "correction filter",
+    ),
+    signal-flow-arrow(555, 72, 610),
+    svg-text(660, 67, "Mixed-phase", size: 16, weight: "bold"),
+    svg-text(660, 88, "output", size: 15, fill: muted),
+    svg-line(18, 124, 702, 124, stroke: grid-color, width: 1),
+    svg-text(
+      18,
+      146,
+      "2012 all-FIR factorisation (b)",
+      anchor: "start",
+      size: 17,
+      fill: muted,
+      weight: "bold",
+    ),
+    svg-text(52, 193, "Input", size: 16),
+    signal-flow-arrow(79, 188, 126),
+    signal-flow-block(
+      126,
+      159,
+      190,
+      "Minimum-phase FIR",
+      "a[n], N_A taps",
+      fill: "#e7f3f4",
+    ),
+    signal-flow-arrow(316, 188, 365),
+    signal-flow-block(
+      365,
+      159,
+      190,
+      "Linear-phase FIR",
+      "b[n], N_B = 2d + 1 taps",
+      fill: "#f8ecdc",
+    ),
+    signal-flow-arrow(555, 188, 610),
+    svg-text(660, 183, "h[n] = a * b", size: 16, weight: "bold"),
+    svg-text(660, 204, "N taps", size: 15, fill: muted),
+    svg-text(
+      340,
+      244,
+      "Convolution support: N_A + N_B - 1 = N",
+      size: 16,
+      fill: muted,
+    ),
+  )
+    .flatten()
+    .map(str)
+    .join("")
+  svg-image(720, 260, body)
 }
 
 #let axes(
@@ -765,14 +899,14 @@
     sample >= -16 and sample <= 48
   })
   let x-pos(value) = x-linear(value, -16, 48)
-  let y-pos(value) = y-linear(value, -0.1, 1.05)
+  let y-pos(value) = y-linear(value, -80, 0)
   let chart-axes = axes(
     ((-16, "-16"), (0, "0"), (16, "16"), (32, "32"), (48, "48")),
-    ((-0.1, "-0.1"), (0, "0"), (0.5, "0.5"), (1, "1")),
+    ((-80, "-80"), (-60, "-60"), (-40, "-40"), (-20, "-20"), (0, "0")),
     x-pos,
     y-pos,
     "Sample relative to peak",
-    "Normalised coefficient",
+    "Relative coefficient magnitude (dB)",
   )
   let methods = (
     "budde-iterative",
