@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -182,6 +183,47 @@ func TestWriteCSV(t *testing.T) {
 	}
 }
 
+// assertTargetCoverage checks that rows contain exactly the wanted targets,
+// each with the expected row count and in the written order.
+func assertTargetCoverage[Row any](
+	t *testing.T,
+	kind string,
+	want []string,
+	perTarget int,
+	rows []Row,
+	name func(Row) string,
+) {
+	t.Helper()
+
+	counts := make(map[string]int, len(want))
+	order := make([]string, 0, len(want))
+
+	for _, row := range rows {
+		target := name(row)
+		if _, seen := counts[target]; !seen {
+			order = append(order, target)
+		}
+
+		counts[target]++
+	}
+
+	if !slices.Equal(order, want) {
+		t.Fatalf("%s targets = %v, want %v", kind, order, want)
+	}
+
+	for _, target := range want {
+		if counts[target] != perTarget {
+			t.Errorf(
+				"%s rows for %s = %d, want %d",
+				kind,
+				target,
+				counts[target],
+				perTarget,
+			)
+		}
+	}
+}
+
 func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
 	frequencyRows, impulseRows, err := RepresentativeResponses()
 	if err != nil {
@@ -189,27 +231,49 @@ func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
 	}
 
 	const methodCount = 5
-	if len(frequencyRows) != methodCount*(FFTSize/2+1) {
+
+	wantFrequencyRows := len(ResponseTargets()) * methodCount * (FFTSize/2 + 1)
+	if len(frequencyRows) != wantFrequencyRows {
 		t.Fatalf(
 			"frequency row count = %d, want %d",
 			len(frequencyRows),
-			methodCount*(FFTSize/2+1),
+			wantFrequencyRows,
 		)
 	}
 
-	if len(impulseRows) != methodCount*TapCount {
+	wantImpulseRows := len(ImpulseTargets()) * methodCount * TapCount
+	if len(impulseRows) != wantImpulseRows {
 		t.Fatalf(
 			"impulse row count = %d, want %d",
 			len(impulseRows),
-			methodCount*TapCount,
+			wantImpulseRows,
 		)
 	}
+
+	// Every published target must be present with its full method set. The
+	// contrast target is the whole point of the pair, so a silent regression to
+	// one target has to fail here rather than quietly shrink the figures.
+	assertTargetCoverage(
+		t,
+		"frequency",
+		ResponseTargets(),
+		methodCount*(FFTSize/2+1),
+		frequencyRows,
+		func(row FrequencyResponseRow) string { return row.Target },
+	)
+	assertTargetCoverage(
+		t,
+		"impulse",
+		ImpulseTargets(),
+		methodCount*TapCount,
+		impulseRows,
+		func(row ImpulseResponseRow) string { return row.Target },
+	)
 
 	weightedRows := 0
 
 	for _, row := range frequencyRows {
-		if row.Target != RepresentativeTarget ||
-			row.SampleRate != SampleRate ||
+		if row.SampleRate != SampleRate ||
 			row.Taps != TapCount ||
 			row.FFTSize != FFTSize {
 			t.Errorf("inconsistent frequency-response budget: %+v", row)
@@ -243,8 +307,7 @@ func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
 	iterativeSignificantPrePeakSamples := 0
 
 	for _, row := range impulseRows {
-		if row.Target != ImpulseTarget ||
-			row.SampleRate != SampleRate ||
+		if row.SampleRate != SampleRate ||
 			row.Taps != TapCount ||
 			row.FFTSize != FFTSize {
 			t.Errorf("inconsistent impulse-response budget: %+v", row)
@@ -269,7 +332,10 @@ func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
 			}
 		}
 
-		if row.Method == "budde-iterative" {
+		// Scoped to ImpulseTarget: the two published targets have very
+		// different pre-peak distributions, and pooling them would let either
+		// one carry the assertion on its own.
+		if row.Method == "budde-iterative" && row.Target == ImpulseTarget {
 			energy := row.Coefficient * row.Coefficient
 
 			iterativeEnergy += energy
@@ -284,8 +350,8 @@ func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
 		}
 	}
 
-	if peaks != methodCount {
-		t.Errorf("aligned peak count = %d, want %d", peaks, methodCount)
+	if want := methodCount * len(ImpulseTargets()); peaks != want {
+		t.Errorf("aligned peak count = %d, want %d", peaks, want)
 	}
 
 	if ratio := iterativePrePeakEnergy / iterativeEnergy; ratio < 0.1 {

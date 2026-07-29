@@ -336,7 +336,7 @@ structure rather than selecting a general FIR phase. It belongs in the
 comparison because it buys latency for an important target class, but it is
 not part of the general mixed-phase API.
 
-= Repository evaluation protocol
+= Repository evaluation protocol <evaluation-protocol>
 
 The 2012 paper contains illustrative response and signal-flow figures but no
 machine-readable result set. The present revision's common benchmark suite
@@ -389,7 +389,7 @@ remain legible when printed in greyscale.
 #figure(
   accuracy-delay-chart(reference-results),
   caption: [
-    Magnitude-accuracy versus mean-delay trade-off over all five reference
+    Magnitude-accuracy versus mean-delay trade-off over all six reference
     targets at 48 kHz. Each point is a realised 129-tap design on the common
     1024-point grid; the phase-controlled methods use a 16-sample budget. The
     error axis is logarithmic. Shape and colour identify the method; complete
@@ -398,18 +398,27 @@ remain legible when printed in greyscale.
 ) <accuracy-delay>
 
 The phase-free designs occupy the low-delay side of @accuracy-delay by allowing
-substantially more magnitude error. The alternating method occupies the
-high-accuracy region, but usually at a greater mean delay than direct phase
-interpolation. This plot is descriptive rather than a universal ranking:
-targets differ in difficulty, and the methods do not optimise the same norm.
+substantially more magnitude error. The plot separates into two regimes, and
+they must be read separately. On the five smooth targets, which cluster below
+25 samples, the alternating method occupies the high-accuracy region but at a
+greater mean delay than direct phase interpolation — the delay is spent without
+being earned, for the reason given in @evaluation-protocol. The
+steep-crossover cluster near 50 samples inverts that relation: there the
+alternating design attains both a lower mean delay than phase interpolation and
+a far lower dB error, which is the behaviour the construction is meant to
+produce. Note that the relative-error axis, being a linear-magnitude norm,
+understates that gap; @cross-target-summary and @contrast-magnitude give the dB
+view. This plot is descriptive rather than a universal ranking: targets differ
+in difficulty, and the methods do not optimise the same norm.
 
 #figure(
   pre-ringing-chart(reference-results),
   caption: [
-    Energy before the realised impulse-response peak for the five reference
+    Energy before the realised impulse-response peak for the six reference
     targets at 48 kHz and 129 output taps (LP: low-pass; PEQ: parametric EQ;
-    XO: crossover). Colour and hatch pattern identify the method; the
-    configurations are identical to @accuracy-delay.
+    XO: crossover; Notch: deep notch; Room: room correction; Steep XO:
+    eighth-order 800 Hz crossover). Colour and hatch pattern identify the
+    method; the configurations are identical to @accuracy-delay.
   ],
 ) <pre-ringing>
 
@@ -417,10 +426,15 @@ targets differ in difficulty, and the methods do not optimise the same norm.
 The alternating crossover result has substantial energy ahead of its peak,
 while several equaliser and notch cases concentrate almost all energy at or
 after the peak. The paper therefore reports both delay and energy distribution.
+The chart also shows the limit of this metric on its own: within each target
+group the alternating and minimum-phase-truncation bars are near-indistinguishable,
+including on steep-crossover, so pre-peak energy alone does not separate a
+mixed-phase design from a delayed minimum-phase one. @representative-impulse
+and @contrast-impulse make that distinction.
 
 == Cross-target interpretation
 
-@cross-target-summary counts the lowest value in each metric across the five
+@cross-target-summary counts the lowest value in each metric across the six
 fixed targets. The counts are computed from the committed CSV during the paper
 build; they are descriptive comparisons under the stated common budget, not
 proof that metrics with different objectives are interchangeable.
@@ -430,7 +444,7 @@ proof that metrics with different objectives are interchangeable.
     #cross-target-summary-table(reference-results)
   ],
   caption: [
-    Number of the five reference targets on which each method has the lowest
+    Number of the six reference targets on which each method has the lowest
     value for the named realised-response metric. Ties, if present, count for
     every tied method. All cells are calculated directly from
     #code-path("docs/reference-results.csv") under the budget of
@@ -443,29 +457,29 @@ The alternating construction has the lowest relative magnitude error on
   reference-results,
   "budde-iterative",
   "relative_magnitude_error",
-) of five targets and the lowest RMS magnitude error on
+) of six targets and the lowest RMS magnitude error on
 #cross-target-win-count(
   reference-results,
   "budde-iterative",
   "rms_magnitude_error_db",
-) of five. The low-group-delay optimiser records the lowest mean delay on
+) of six. The low-group-delay optimiser records the lowest mean delay on
 #cross-target-win-count(
   reference-results,
   "low-group-delay",
   "mean_group_delay",
-) of five targets and the smallest coefficient range on
+) of six targets and the smallest coefficient range on
 #cross-target-win-count(
   reference-results,
   "low-group-delay",
   "coefficient_range_db",
-) of five, but it achieves this by solving a different problem with a
+) of six, but it achieves this by solving a different problem with a
 2 dB magnitude constraint. It also has the least pre-peak energy on
 #cross-target-win-count(
   reference-results,
   "low-group-delay",
   "pre_peak_energy_ratio",
-) of five; the low-pass exception shows that the lowest mean delay need not
-minimise ringing before the largest coefficient.
+) of six; the low-pass and steep-crossover exceptions show that the lowest mean
+delay need not minimise ringing before the largest coefficient.
 
 Complex minimax has no aggregate win in these magnitude-only columns. That is
 not a failure of its stated objective: Lawson reweighting controls peak complex
@@ -481,11 +495,17 @@ the complex-response norm or band priorities are the actual specification.
 The parametric-EQ case exposes frequency-response shape and scalar metrics
 without the ill-conditioned stopband phase of a low-pass example. The impulse
 plot instead uses the fourth-order Linkwitz--Riley 2 kHz low-pass crossover
-fixture from the common suite. This separation is deliberate: the smooth
-parametric-EQ residual is nearly an identity delayed to the centre of its
-linear-phase support, so it does not demonstrate how the alternating
-construction can spend the available pre-peak support. The crossover requires
-enough residual shaping to make that distribution visible.
+fixture from the common suite, whose realised response occupies far more of the
+available support.
+
+Both are smooth targets, so both are degenerate in the sense of
+@evaluation-protocol, and neither on its own can show the alternating
+construction shaping anything. Each is therefore published together with the
+steep-crossover fixture on identical axes. The pairs are the evidence: the
+figures below establish what the degenerate case looks like so that the
+support-starved case can be read against it, and it is the difference between
+the two, not either one alone, that distinguishes a mixed-phase design from a
+delayed minimum-phase filter.
 
 Both examples use realised 129-tap filters at 48 kHz on the 1024-point design
 and analysis grid. The three prescribed-phase designs use $d=16$ samples. The
@@ -508,11 +528,15 @@ commit that produced the artifacts.
   ],
 ) <representative-magnitude>
 
-@representative-magnitude shows that the alternating construction follows this
-smooth target most closely. Phase interpolation and complex minimax preserve
-the intended bell but introduce visibly larger finite-support error. The
+@representative-magnitude shows the alternating construction following this
+smooth target closely — 0.0058 dB RMS error against 0.0995 dB for phase
+interpolation and 0.2396 dB for complex minimax, both of which preserve the
+intended bell but introduce visibly larger finite-support error. The
 low-group-delay result spends its allowed magnitude tolerance to move energy
-earlier.
+earlier. The delay-zero baseline is closer still, at 0.0003 dB and a mean delay
+of 6.21 samples against 22.21: on a target this smooth the 16-sample budget buys
+nothing, which is the degeneracy stated in @evaluation-protocol seen in the
+frequency domain.
 
 #figure(
   group-delay-response-chart(reference-response),
@@ -547,12 +571,77 @@ behaviour is visible here and is not captured by a single mean value.
 ) <representative-impulse>
 
 Peak alignment in @representative-impulse separates waveform shape from
-absolute latency. Unlike the parametric-EQ case, the crossover residual makes
-substantial use of the support before the alternating response's peak. The
-plot therefore distinguishes a genuinely mixed-phase response from a
-minimum-phase response followed by an almost pure delay. Coefficient signs,
-full unnormalised values, peak indices, and the exact pre-peak energy ratios
-remain in the committed CSV and scalar result set.
+absolute latency, and on this target the separation is total. The alternating
+and minimum-phase-truncation traces coincide: over the 113 shared aligned
+samples their normalised coefficients differ by at most $3.0 dot 10^(-7)$,
+their peak indices differ by exactly the 16-sample budget (26 against 10), and
+their energy centroids differ by exactly 16.00 samples. Substantial pre-peak
+energy — 44.77% for both — is therefore not evidence of a mixed-phase design:
+the delay-zero baseline has precisely as much. This figure shows the degeneracy
+of @evaluation-protocol rather than contradicting it. Coefficient signs, full
+unnormalised values, peak indices, and the exact pre-peak energy ratios remain
+in the committed CSV and scalar result set.
+
+#figure(
+  peak-aligned-impulse-chart(reference-impulse, target: "steep-crossover"),
+  caption: [
+    Peak-aligned realised impulse responses for the eighth-order 800 Hz
+    crossover target, on axes and budgets identical to
+    @representative-impulse so the two may be read against each other. Source:
+    #code-path("docs/reference-impulse.csv").
+  ],
+) <contrast-impulse>
+
+@contrast-impulse is the same plot on a target whose minimum-phase factor does
+not fit the $N_A$ taps the split allocates. The two traces that coincided in
+@representative-impulse no longer do: their peak-aligned coefficients differ by
+up to $4.3 dot 10^(-2)$, five orders of magnitude more than before, at an equal
+peak index of 51. The alternating design is therefore not a delayed copy of the
+baseline here, which is the regime in which the factorisation is doing work.
+On a normalised dB scale that difference is a fraction of a decibel near the
+peak and is deliberately not claimed to be conspicuous in the figure; the
+separation it produces is a frequency-domain effect, and @contrast-magnitude is
+where it becomes visible. Both bounds are pinned by
+`TestPeakAlignedImpulseSeparatesTheRegimes`.
+
+#figure(
+  magnitude-response-chart(
+    reference-response,
+    target: "steep-crossover",
+    y-bounds: (-100, 6),
+    y-ticks: (
+      (-100, "-100"),
+      (-80, "-80"),
+      (-60, "-60"),
+      (-40, "-40"),
+      (-20, "-20"),
+      (0, "0"),
+    ),
+  ),
+  caption: [
+    Target and realised magnitude for the steep-crossover fixture, under the
+    budgets of @representative-magnitude. Note the axis: this target spans
+    100 dB where the parametric-EQ fixture spans 16, and values below −100 dB
+    are clamped to the plot floor. Source:
+    #code-path("docs/reference-response.csv").
+  ],
+) <contrast-magnitude>
+
+@contrast-magnitude shows what that work buys. The alternating construction
+tracks the crossover skirt far into the stopband, while phase interpolation,
+complex minimax and the delay-zero baseline all depart from it well above
+−70 dB. Integrated over the band this is the largest margin in the suite:
+6.90 dB RMS magnitude error against 54.48 dB for phase interpolation, 54.93 dB
+for minimum-phase truncation, 42.84 dB for the low-group-delay optimiser and
+72.23 dB for complex minimax — at a mean group delay of 49.61 samples, which is
+_lower_ than phase interpolation's 53.04. The method wins on accuracy and delay
+at once here, which it does on none of the five smooth targets.
+
+The corresponding group-delay plot is omitted: this target's weight is confined
+to the band below 516 Hz, where all five designs lie between 42.9 and 59.1
+samples and the curves are not separable at a legible scale. The scalar
+group-delay ripple for every method is in @cross-target-summary and the
+committed CSV.
 
 #let alternating-crossover = reference-results.find(row => (
   row.at("target") == "crossover" and row.at("method") == "budde-iterative"
@@ -651,9 +740,11 @@ corresponding row.
         minimum-phase response plus delay despite the available support.
       ],
       [
-        Inspect pre-peak energy and its distribution, not only peak index.
-        Increase the linear allocation or use a prescribed-phase method when
-        substantial pre-ringing is a requirement.
+        Pre-peak energy does _not_ detect this: on @representative-impulse the
+        degenerate and delay-zero designs agree on it to four decimals.
+        Compare against the same design at $d=0$, or measure the linear
+        factor's energy away from its centre tap, as
+        #code-path("TestSteepTargetActuallyExercisesTheFactorisation") does.
       ],
 
       [Low-delay optimisation],
@@ -788,7 +879,7 @@ revision shown on the title page.
     #code-path("internal/reference.analyze"). _Evidence:_
     #code-path("TestRunCoversEveryMethodAndMetric"),
     #code-path("TestTargetsShareFixedBudgets"), and the committed-CSV assertion
-    in #code-path("internal/reference/reference_test.go"). _Budget:_ five
+    in #code-path("internal/reference/reference_test.go"). _Budget:_ six
     257-tap prototypes at 48 kHz, 129 output taps, $K=1024$, target-specific
     group-delay weights, and no timing trials. _Reproduce:_
     `go test ./internal/reference`; `just compare-check`.
@@ -824,12 +915,13 @@ revision shown on the title page.
     #code-path("cross-target-summary-table") Typst helper computes every count
     from #code-path("docs/reference-results.csv"). _Evidence:_ the artifact is
     byte-compared by #code-path("TestRunCoversEveryMethodAndMetric"). _Budget:_
-    the five-target common reference budget listed under “Common realised-
+    the six-target common reference budget listed under “Common realised-
     response analysis”; no summary value is stored in the Typst source.
     _Reproduce:_ `just compare-check`; rebuild with `just paper`.
 
   - *@representative-magnitude, @representative-group-delay,
-      @representative-impulse, and @representative-results.* _Generator:_
+      @representative-impulse, @contrast-impulse, @contrast-magnitude, and
+      @representative-results.* _Generator:_
     #code-path("internal/reference.RepresentativeResponses"), invoked by
     #code-path("examples/mixedphase"). _Artifacts:_
     #code-path("docs/reference-response.csv"),
@@ -840,10 +932,20 @@ revision shown on the title page.
     parametric-EQ response target and fourth-order Linkwitz--Riley 2 kHz
     low-pass crossover impulse target at 48 kHz, $N=129$, $K=1024$, $d=16$ for
     prescribed phase, and the exact weights, tolerances, and iteration limits
-    listed under “Representative realised responses.” The reference test
-    additionally requires the plotted alternating crossover to place at least
-    10% of its energy and at least eight coefficients above −40 dB before its
-    peak. _Reproduce:_ `just compare-check`; rebuild with `just paper`.
+    listed under “Representative realised responses.” Both artifacts
+    additionally carry the steep-crossover target under the same budget, which
+    is what @contrast-impulse and @contrast-magnitude plot; the published target
+    lists are
+    #code-path("reference.ResponseTargets") and
+    #code-path("reference.ImpulseTargets"), and
+    #code-path("TestRepresentativeResponsesCoverRealisedDesigns") fails if
+    either shrinks to a single target. The reference test also requires the
+    plotted alternating crossover to place at least 10% of its energy and at
+    least eight coefficients above −40 dB before its peak, while
+    #code-path("TestPeakAlignedImpulseSeparatesTheRegimes") pins the
+    $3.0 dot 10^(-7)$ and $4.3 dot 10^(-2)$ deviations quoted for the two
+    impulse figures. _Reproduce:_ `just compare-check`; rebuild with
+    `just paper`.
 
   - *@graphiceq-tradeoff.* _Generator:_ #code-path("examples/graphiceq").
     _Artifact:_ #code-path("docs/graphiceq-results.csv"). Each hybrid split is
@@ -876,7 +978,7 @@ committed CSV fields directly.
 
 = Limitations and open work
 
-The comparison is limited to five fixed targets, one 129-tap output budget,
+The comparison is limited to six fixed targets, one 129-tap output budget,
 and the stated optimiser budgets; it does not establish asymptotic convergence
 or perceptual preference. The original signal-flow figures are redrawn only as
 a qualitative structural diagram; their response example has not been

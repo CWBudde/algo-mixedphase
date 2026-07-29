@@ -18,11 +18,19 @@ const (
 	// Its magnitude remains meaningful across the full audio band, while its
 	// group-delay weight selects a finite band away from DC and Nyquist.
 	RepresentativeTarget = "parametric-eq"
-	// ImpulseTarget is the target used for the peak-aligned impulse plot. The
-	// crossover fixture requires the short linear-phase residual to perform
-	// meaningful shaping, unlike targets whose minimum-phase factor already
-	// fits its assigned support and leaves an almost pure delay as residual.
+	// ImpulseTarget is the target used for the peak-aligned impulse plot. Its
+	// minimum-phase factor fits the support the split allocates, so the
+	// residual is an almost pure delay and the plotted impulse is a delayed
+	// minimum-phase response. It is published as the degenerate reference case,
+	// against which DegenerateContrastTarget is read.
 	ImpulseTarget = "crossover"
+	// DegenerateContrastTarget is the support-starved target plotted alongside
+	// the two representative ones. Its minimum-phase factor does not fit the
+	// taps the split allocates, so the linear factor carries real energy away
+	// from its centre tap and the alternating correction does the work the
+	// method claims. Plotting both regimes is the point: neither figure means
+	// much without the other.
+	DegenerateContrastTarget = "steep-crossover"
 )
 
 const (

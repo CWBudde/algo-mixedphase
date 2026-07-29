@@ -365,12 +365,22 @@ the delay budget removed — matches or beats it on relative error and RMS dB on
 one of them, at a third to a twentieth of the delay. Those five rows measure the
 minimum-phase reconstruction, not the factorisation.
 
+The published impulse responses show this directly. On the `crossover` target the
+two designs' peak-aligned coefficients agree to `3.0e-07` over all 113 shared
+samples, and their peak indices differ by exactly the 16-sample budget — they are
+the same filter, one delayed. On `steep-crossover` the same comparison differs by
+`4.3e-02`, five orders of magnitude more. Note also that both targets give the two
+designs the _same_ pre-peak energy ratio to four decimals, so a high pre-peak
+figure is not on its own evidence of a mixed-phase result.
+
 `steep-crossover` is the row that measures the method. An eighth-order crossover at
 800 Hz does not fit the budget, the linear factor carries 92.4% of its energy off
 centre, and the correction loop accepts five passes. There the alternating
 factorisation reaches 6.901 dB RMS magnitude error against 54.483 dB for phase
 interpolation, 54.934 dB for minimum-phase truncation and 42.838 dB for the
-low-delay optimiser, at a comparable mean group delay. It buys that with
+low-delay optimiser, at a mean group delay of 49.61 samples — _lower_ than phase
+interpolation's 53.04, so on this target it wins on accuracy and delay at once.
+It buys that with
 linear-magnitude accuracy (2.509% against 1.227%) and with the worst group-delay
 ripple of the fixed-delay methods. `TestSteepTargetActuallyExercisesTheFactorisation`
 guards both halves of this, so the suite cannot silently drift back to measuring

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -434,5 +435,112 @@ func TestSteepTargetActuallyExercisesTheFactorisation(t *testing.T) {
 
 	if smooth == 0 {
 		t.Fatal("no smooth targets left to contrast against")
+	}
+}
+
+// TestPeakAlignedImpulseSeparatesTheRegimes pins the comparison the paper's two
+// impulse figures rest on. On a degenerate target the alternating design is a
+// delayed copy of the delay-zero minimum-phase truncation, so their peak-aligned
+// impulse responses coincide; on the support-starved target they must not. The
+// quoted bounds are the ones cited in the paper and in
+// docs/MIXED_PHASE_FILTER_DESIGN.md.
+func TestPeakAlignedImpulseSeparatesTheRegimes(t *testing.T) {
+	_, impulseRows, err := RepresentativeResponses()
+	if err != nil {
+		t.Fatalf("RepresentativeResponses() error = %v", err)
+	}
+
+	aligned := make(map[string]map[int]float64)
+	peakIndex := make(map[string]int)
+
+	for _, row := range impulseRows {
+		key := row.Target + "/" + row.Method
+		if aligned[key] == nil {
+			aligned[key] = make(map[int]float64, TapCount)
+		}
+
+		aligned[key][row.PeakAlignedIndex] = row.NormalisedCoefficient
+		peakIndex[key] = row.PeakIndex
+	}
+
+	cases := []struct {
+		target string
+		// The alternating and delay-zero designs agree to within tolerance
+		// when identical is true, and differ by at least it when false.
+		identical bool
+		tolerance float64
+	}{
+		{target: ImpulseTarget, identical: true, tolerance: 1e-6},
+		{target: DegenerateContrastTarget, identical: false, tolerance: 1e-2},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.target, func(t *testing.T) {
+			iterative := aligned[testCase.target+"/budde-iterative"]
+			baseline := aligned[testCase.target+"/minphase-truncation"]
+
+			if len(iterative) == 0 || len(baseline) == 0 {
+				t.Fatalf("%s: missing published impulse rows", testCase.target)
+			}
+
+			deviation, shared := 0.0, 0
+
+			for index, value := range iterative {
+				other, ok := baseline[index]
+				if !ok {
+					continue
+				}
+
+				shared++
+				deviation = max(deviation, math.Abs(value-other))
+			}
+
+			if shared == 0 {
+				t.Fatalf("%s: no shared aligned samples", testCase.target)
+			}
+
+			t.Logf(
+				"%s: max deviation %.3e over %d shared samples",
+				testCase.target,
+				deviation,
+				shared,
+			)
+
+			if testCase.identical && deviation > testCase.tolerance {
+				t.Errorf(
+					"%s: alternating and delay-zero designs differ by %.3e "+
+						"(want <= %.0e); the target no longer demonstrates the "+
+						"degeneracy the paper describes",
+					testCase.target,
+					deviation,
+					testCase.tolerance,
+				)
+			}
+
+			if !testCase.identical && deviation < testCase.tolerance {
+				t.Errorf(
+					"%s: alternating and delay-zero designs agree to %.3e "+
+						"(want >= %.0e); the alternating design has collapsed "+
+						"into a delayed minimum-phase filter",
+					testCase.target,
+					deviation,
+					testCase.tolerance,
+				)
+			}
+		})
+	}
+
+	// The degenerate pair differs by exactly the delay budget, which is what
+	// makes it a delayed copy rather than merely a similar filter.
+	iterativePeak := peakIndex[ImpulseTarget+"/budde-iterative"]
+	baselinePeak := peakIndex[ImpulseTarget+"/minphase-truncation"]
+
+	if got := iterativePeak - baselinePeak; got != DelayBudget {
+		t.Errorf(
+			"%s peak index offset = %d, want the %d-sample budget",
+			ImpulseTarget,
+			got,
+			DelayBudget,
+		)
 	}
 }

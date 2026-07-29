@@ -8,25 +8,30 @@ import (
 	algofft "github.com/cwbudde/algo-fft"
 )
 
-// RepresentativeResponses designs every general method for
-// RepresentativeTarget and ImpulseTarget, then samples the realised frequency
-// and impulse responses used by the paper.
+// ResponseTargets are the targets whose realised frequency responses are
+// published, in written order. DegenerateContrastTarget accompanies the
+// representative one because the alternating factorisation is inert on the
+// latter: comparing the two is what distinguishes the method from a delayed
+// minimum-phase filter.
+func ResponseTargets() []string {
+	return []string{RepresentativeTarget, DegenerateContrastTarget}
+}
+
+// ImpulseTargets are the targets whose peak-aligned impulse responses are
+// published, in written order.
+func ImpulseTargets() []string {
+	return []string{ImpulseTarget, DegenerateContrastTarget}
+}
+
+// RepresentativeResponses designs every general method for ResponseTargets and
+// ImpulseTargets, then samples the realised frequency and impulse responses
+// used by the paper.
 func RepresentativeResponses() (
 	[]FrequencyResponseRow,
 	[]ImpulseResponseRow,
 	error,
 ) {
 	targets, err := Targets()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	responseTarget, err := findTarget(targets, RepresentativeTarget)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	impulseTarget, err := findTarget(targets, ImpulseTarget)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -39,31 +44,65 @@ func RepresentativeResponses() (
 		)
 	}
 
-	targetSpectrum, err := realSpectrum(plan, responseTarget.Prototype)
+	frequencyRows := make(
+		[]FrequencyResponseRow,
+		0,
+		len(ResponseTargets())*len(methods())*(FFTSize/2+1),
+	)
+
+	for _, name := range ResponseTargets() {
+		target, findErr := findTarget(targets, name)
+		if findErr != nil {
+			return nil, nil, findErr
+		}
+
+		frequencyRows, err = appendFrequencyRows(plan, target, frequencyRows)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	impulseRows := make(
+		[]ImpulseResponseRow,
+		0,
+		len(ImpulseTargets())*len(methods())*TapCount,
+	)
+
+	for _, name := range ImpulseTargets() {
+		target, findErr := findTarget(targets, name)
+		if findErr != nil {
+			return nil, nil, findErr
+		}
+
+		impulseRows, err = appendImpulseRows(target, impulseRows)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return frequencyRows, impulseRows, nil
+}
+
+func appendFrequencyRows(
+	plan *algofft.Plan[complex128],
+	target Target,
+	rows []FrequencyResponseRow,
+) ([]FrequencyResponseRow, error) {
+	targetSpectrum, err := realSpectrum(plan, target.Prototype)
 	if err != nil {
-		return nil, nil, fmt.Errorf(
-			"reference: transform representative target: %w",
+		return nil, fmt.Errorf(
+			"reference: transform representative target %s: %w",
+			target.Name,
 			err,
 		)
 	}
 
-	frequencyRows := make(
-		[]FrequencyResponseRow,
-		0,
-		len(methods())*(FFTSize/2+1),
-	)
-	impulseRows := make(
-		[]ImpulseResponseRow,
-		0,
-		len(methods())*TapCount,
-	)
-
 	for _, method := range methods() {
-		result, designErr := method.design(responseTarget)
+		result, designErr := method.design(target)
 		if designErr != nil {
-			return nil, nil, fmt.Errorf(
+			return nil, fmt.Errorf(
 				"reference: design representative %s/%s: %w",
-				responseTarget.Name,
+				target.Name,
 				method.name,
 				designErr,
 			)
@@ -71,17 +110,17 @@ func RepresentativeResponses() (
 
 		spectrum, transformErr := realSpectrum(plan, result.Taps)
 		if transformErr != nil {
-			return nil, nil, fmt.Errorf(
+			return nil, fmt.Errorf(
 				"reference: transform representative %s/%s: %w",
-				responseTarget.Name,
+				target.Name,
 				method.name,
 				transformErr,
 			)
 		}
 
 		for bin := range FFTSize/2 + 1 {
-			frequencyRows = append(frequencyRows, FrequencyResponseRow{
-				Target:            responseTarget.Name,
+			rows = append(rows, FrequencyResponseRow{
+				Target:            target.Name,
 				Method:            method.name,
 				SampleRate:        SampleRate,
 				Taps:              len(result.Taps),
@@ -91,17 +130,24 @@ func RepresentativeResponses() (
 				TargetMagnitudeDB: magnitudeDB(targetSpectrum[bin]),
 				MagnitudeDB:       magnitudeDB(spectrum[bin]),
 				GroupDelay:        groupDelayAt(result.Taps, spectrum[bin], bin),
-				DelayWeight:       responseTarget.DelayWeight[bin],
+				DelayWeight:       target.DelayWeight[bin],
 			})
 		}
 	}
 
+	return rows, nil
+}
+
+func appendImpulseRows(
+	target Target,
+	rows []ImpulseResponseRow,
+) ([]ImpulseResponseRow, error) {
 	for _, method := range methods() {
-		result, designErr := method.design(impulseTarget)
+		result, designErr := method.design(target)
 		if designErr != nil {
-			return nil, nil, fmt.Errorf(
+			return nil, fmt.Errorf(
 				"reference: design impulse %s/%s: %w",
-				impulseTarget.Name,
+				target.Name,
 				method.name,
 				designErr,
 			)
@@ -118,8 +164,8 @@ func RepresentativeResponses() (
 				normalised = coefficient / peak
 			}
 
-			impulseRows = append(impulseRows, ImpulseResponseRow{
-				Target:                impulseTarget.Name,
+			rows = append(rows, ImpulseResponseRow{
+				Target:                target.Name,
 				Method:                method.name,
 				SampleRate:            SampleRate,
 				Taps:                  len(result.Taps),
@@ -134,7 +180,7 @@ func RepresentativeResponses() (
 		}
 	}
 
-	return frequencyRows, impulseRows, nil
+	return rows, nil
 }
 
 func findTarget(targets []Target, name string) (Target, error) {

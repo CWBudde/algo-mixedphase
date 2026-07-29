@@ -224,6 +224,31 @@
     )
       .map(str)
       .join("")
+  } else if index == 3 {
+    // Inverted triangle. Every method needs a shape of its own: the paper
+    // claims the figures stay legible in greyscale, which only holds while no
+    // two methods share a marker.
+    (
+      "<polygon points=\"",
+      number(x),
+      ",",
+      number(y + size + 1),
+      " ",
+      number(x - size),
+      ",",
+      number(y - size),
+      " ",
+      number(x + size),
+      ",",
+      number(y - size),
+      "\" fill=\"",
+      color,
+      "\" stroke=\"",
+      ink,
+      "\" stroke-width=\"1.5\"/>",
+    )
+      .map(str)
+      .join("")
   } else {
     (
       "<polygon points=\"",
@@ -544,7 +569,9 @@
     .join("")
 }
 
-#let method-legend(y: 405) = {
+// Five methods wrap onto three rows of two, so the block starts higher than it
+// did at four to keep the last row's descenders inside the canvas.
+#let method-legend(y: 396) = {
   let methods = (
     "budde-iterative",
     "phase-interpolation",
@@ -631,7 +658,10 @@
 }
 
 #let accuracy-delay-chart(rows) = {
-  let x-pos(value) = x-linear(value, 0, 30)
+  // The axis spans every target, not just the smooth ones: the steep-crossover
+  // designs sit near 50 samples, so a 30-sample axis would drop them outside
+  // the plot frame entirely.
+  let x-pos(value) = x-linear(value, 0, 60)
   let y-pos(value) = y-log(value, 0.00001, 100)
   let points = rows
     .map(row => {
@@ -641,7 +671,7 @@
     })
     .join("")
   let chart-axes = axes(
-    ((0, "0"), (10, "10"), (20, "20"), (30, "30")),
+    ((0, "0"), (15, "15"), (30, "30"), (45, "45"), (60, "60")),
     (
       (0.00001, "0.00001"),
       (0.001, "0.001"),
@@ -673,7 +703,9 @@
     "minphase-truncation",
     "low-group-delay",
   )
-  let y-pos(value) = y-linear(value, 0, 50)
+  // Headroom above the 49.45% maximum so no bar renders flush against the
+  // top rule.
+  let y-pos(value) = y-linear(value, 0, 55)
   let group-width = (plot-right - plot-left) / 6
   let bar-width = 14
   let bars = targets
@@ -733,6 +765,8 @@
     "Target",
     "Energy before peak (%)",
   )
+  // One pattern per method, in method-index order, each matching that method's
+  // line colour. A missing entry would silently render an unfilled bar.
   let definitions = "
     <pattern id=\"pattern0\" width=\"8\" height=\"8\" patternUnits=\"userSpaceOnUse\">
       <rect width=\"8\" height=\"8\" fill=\"#007782\"/>
@@ -747,6 +781,10 @@
       <circle cx=\"6\" cy=\"6\" r=\"1.4\" fill=\"#33383d\"/>
     </pattern>
     <pattern id=\"pattern3\" width=\"8\" height=\"8\" patternUnits=\"userSpaceOnUse\">
+      <rect width=\"8\" height=\"8\" fill=\"#d6e6d6\"/>
+      <path d=\"M0,4 L8,4\" stroke=\"#2c562c\" stroke-width=\"1.6\"/>
+    </pattern>
+    <pattern id=\"pattern4\" width=\"8\" height=\"8\" patternUnits=\"userSpaceOnUse\">
       <rect width=\"8\" height=\"8\" fill=\"#ead5e1\"/>
       <path d=\"M0,0 L8,8 M8,0 L0,8\" stroke=\"#65334f\" stroke-width=\"1.4\"/>
     </pattern>"
@@ -819,16 +857,28 @@
   chart-image((chart-axes, hybrid-points, fir-points, legend).map(str).join(""))
 }
 
-#let magnitude-response-chart(rows) = {
+// The response CSV carries more than one target, so every chart selects its
+// own. Axis bounds are per-target: an equaliser's ±12 dB window says nothing
+// useful about a crossover that falls past -100 dB.
+#let magnitude-response-chart(
+  rows,
+  target: "parametric-eq",
+  y-bounds: (-4, 12),
+  y-ticks: ((-4, "-4"), (0, "0"), (4, "4"), (8, "8"), (12, "12")),
+) = {
   let visible = rows.filter(row => {
     let frequency = float(row.at("frequency_hz"))
-    frequency >= 50 and frequency <= 20000
+    row.at("target") == target and frequency >= 50 and frequency <= 20000
   })
+  let y-min = y-bounds.at(0)
+  let y-max = y-bounds.at(1)
   let x-pos(value) = x-log(value, 50, 20000)
-  let y-pos(value) = y-linear(value, -4, 12)
+  // Clamped so a null deeper than the axis pins to the frame instead of
+  // escaping it. The floor is stated in the caption.
+  let y-pos(value) = y-linear(calc.clamp(value, y-min, y-max), y-min, y-max)
   let chart-axes = axes(
     ((50, "50"), (100, "100"), (1000, "1k"), (10000, "10k"), (20000, "20k")),
-    ((-4, "-4"), (0, "0"), (4, "4"), (8, "8"), (12, "12")),
+    y-ticks,
     x-pos,
     y-pos,
     "Frequency (Hz)",
@@ -868,19 +918,30 @@
   )
 }
 
-#let group-delay-response-chart(rows) = {
-  let visible = rows.filter(row => float(row.at("delay_weight")) > 0)
-  let x-pos(value) = x-linear(value, 1800, 5000)
-  let y-pos(value) = y-linear(value, -40, 40)
+#let group-delay-response-chart(
+  rows,
+  target: "parametric-eq",
+  x-bounds: (1800, 5000),
+  x-ticks: (
+    (1800, "1.8k"),
+    (2600, "2.6k"),
+    (3400, "3.4k"),
+    (4200, "4.2k"),
+    (5000, "5k"),
+  ),
+  y-bounds: (-40, 40),
+  y-ticks: ((-40, "-40"), (-20, "-20"), (0, "0"), (20, "20"), (40, "40")),
+) = {
+  let visible = rows.filter(row => (
+    row.at("target") == target and float(row.at("delay_weight")) > 0
+  ))
+  let y-min = y-bounds.at(0)
+  let y-max = y-bounds.at(1)
+  let x-pos(value) = x-linear(value, x-bounds.at(0), x-bounds.at(1))
+  let y-pos(value) = y-linear(calc.clamp(value, y-min, y-max), y-min, y-max)
   let chart-axes = axes(
-    (
-      (1800, "1.8k"),
-      (2600, "2.6k"),
-      (3400, "3.4k"),
-      (4200, "4.2k"),
-      (5000, "5k"),
-    ),
-    ((-40, "-40"), (-20, "-20"), (0, "0"), (20, "20"), (40, "40")),
+    x-ticks,
+    y-ticks,
     x-pos,
     y-pos,
     "Frequency (Hz)",
@@ -908,10 +969,13 @@
   )
 }
 
-#let peak-aligned-impulse-chart(rows) = {
+// Axis bounds are deliberately fixed across targets: the two published impulse
+// figures are meant to be read against each other, which only works while the
+// frames are identical.
+#let peak-aligned-impulse-chart(rows, target: "crossover") = {
   let visible = rows.filter(row => {
     let sample = int(row.at("peak_aligned_index"))
-    sample >= -24 and sample <= 48
+    row.at("target") == target and sample >= -24 and sample <= 48
   })
   let x-pos(value) = x-linear(value, -24, 48)
   let y-pos(value) = y-linear(value, -80, 0)
