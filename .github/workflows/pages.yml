@@ -15,7 +15,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The lab is only published once the full suite has passed. Previously this
+  # workflow inlined its own copy of the web tests and deployed independently,
+  # so a commit that broke `go test` still shipped.
+  unit-tests:
+    name: Unit Tests
+    uses: ./.github/workflows/test-unit.yml
+
+  web:
+    name: Web Lab
+    uses: ./.github/workflows/test-web.yml
+
   deploy:
+    needs: [unit-tests, web]
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -31,16 +43,6 @@ jobs:
 
       - name: Build web wasm assets
         run: ./web/build-wasm.sh
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Test web lab
-        run: |
-          node --test web/lab-state.test.mjs
-          ./scripts/test-web.sh
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

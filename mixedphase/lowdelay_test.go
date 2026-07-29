@@ -343,12 +343,12 @@ func TestLowGroupDelayValidation(t *testing.T) {
 		{
 			name: "negative penalty",
 			cfg:  LowGroupDelayConfig{InitialPenalty: -1},
-			want: ErrInvalidTolerance,
+			want: ErrInvalidPenalty,
 		},
 		{
 			name: "negative stages",
 			cfg:  LowGroupDelayConfig{PenaltyStages: -1},
-			want: ErrInvalidLength,
+			want: ErrInvalidIterations,
 		},
 		{
 			name: "unknown method",

@@ -53,9 +53,7 @@ func analyzeAgainstSpectrum(
 	}
 
 	if peakMagnitude == 0 {
-		return Metrics{}, fmt.Errorf(
-			"mixedphase: reference magnitude is identically zero",
-		)
+		return Metrics{}, fmt.Errorf("%w: reference magnitude", ErrZeroResponse)
 	}
 
 	floor := peakMagnitude * 1e-6

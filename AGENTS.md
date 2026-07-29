@@ -28,14 +28,17 @@ missing upstream, add it upstream rather than reimplementing it here.
 ## Development Commands
 
 ```bash
-just test       # go test ./...
-just test-race  # go test -race ./...
-just lint       # golangci-lint (v2 config, incl. wsl_v5)
-just fmt        # treefmt
-just bench      # benchmarks
-just compare    # regenerate the comparison CSVs quoted in the docs
-just ci         # everything CI runs
-just web-demo   # build and serve the Mixed Phase Lab on :8787
+just test            # go test ./...
+just test-race       # go test -race ./...
+just lint            # golangci-lint (v2 config, incl. wsl_v5)
+just fmt             # treefmt
+just bench           # benchmarks
+just compare         # regenerate the comparison CSVs quoted in the docs
+just compare-check   # prove those CSVs are byte-reproducible
+just compare-timings # refresh the machine-local timings (not reproducible)
+just check-coverage  # enforce the 90% floor on the two public packages
+just ci              # everything CI runs
+just web-demo        # build and serve the Mixed Phase Lab on :8787
 ```
 
 ## What makes a change acceptable here
@@ -44,7 +47,10 @@ This is a comparison repository, so the standard is reproducibility rather than 
 
 1. **Every number in a doc comment or in `docs/` must be reproducible** by a test or by
    `just compare`. State the budget that produced it — iteration counts and tolerances are
-   dials, not converged values.
+   dials, not converged values. Nothing machine-dependent may enter a committed
+   artifact that `just compare` regenerates: timings belong in
+   `docs/reference-timings.csv`, which is written only by `just compare-timings`
+   and is never diff-gated.
 2. **Measure against the structure that actually runs.** Metrics computed on the design
    grid are not proof; verify against the realised impulse response (see
    `TestImpulseResponseMatchesMetrics` in `graphiceq`).
@@ -69,5 +75,8 @@ This is a comparison repository, so the standard is reproducibility rather than 
 ## Conventions
 
 - Conventional commits.
-- Go: latest stable + previous stable.
+- Go: the version in `go.mod` (1.25) only. `algo-dsp` and `algo-fft` both
+  declare `go 1.25.0`, so a "previous stable" job cannot build this module —
+  it would just download 1.25 through `GOTOOLCHAIN` and test the same thing
+  twice. Widen the matrix again once upstream lowers its floor.
 - Semantic versioning; `v0.x` until the API settles.

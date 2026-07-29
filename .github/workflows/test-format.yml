@@ -16,17 +16,25 @@ jobs:
 
       - name: Setup Go
         uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
 
+      # Every formatter is pinned. This job fails the build on any diff, so an
+      # unpinned `@latest` would let an upstream release break `main` with no
+      # change to this repository.
       - name: Install Go formatters
-        run: go install mvdan.cc/gofumpt@latest && go install github.com/daixiang0/gci@latest
+        run: |
+          go install mvdan.cc/gofumpt@v0.10.0
+          go install github.com/daixiang0/gci@v0.14.0
 
       - name: Install shell tools
         run: |
+          sudo apt-get update
           sudo apt-get install -y shellcheck
-          go install mvdan.cc/sh/v3/cmd/shfmt@latest
+          go install mvdan.cc/sh/v3/cmd/shfmt@v3.12.0
 
       - name: Install prettier
-        run: npm install -g prettier
+        run: npm install -g prettier@3.5.3
 
       - name: Install typstyle
         run: |

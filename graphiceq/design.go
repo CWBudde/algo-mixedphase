@@ -3,10 +3,12 @@ package graphiceq
 import (
 	"fmt"
 	"math"
+	"math/cmplx"
 
 	"github.com/cwbudde/algo-dsp/dsp/filter/biquad"
 	"github.com/cwbudde/algo-dsp/dsp/filter/design"
 	"github.com/cwbudde/algo-dsp/dsp/window"
+	"github.com/cwbudde/algo-mixedphase/internal/fftx"
 )
 
 const (
@@ -244,14 +246,7 @@ func resolveFFTSize(cfg Config, length int) (int, error) {
 		return cfg.FFTSize, nil
 	}
 
-	target := max(16, 8*length)
-
-	size := 1
-	for size < target {
-		size <<= 1
-	}
-
-	return size, nil
+	return fftx.NextPowerOfTwo(length, 16), nil
 }
 
 func (r resolved) frequencies() []float64 {
@@ -400,7 +395,7 @@ func designFIR(
 	firDB := make([]float64, r.bins)
 	for k := range firDB {
 		firDB[k] = 20 * math.Log10(
-			max(magnitudeFloor, complexAbs(response[k])),
+			max(magnitudeFloor, cmplx.Abs(response[k])),
 		)
 	}
 
@@ -421,10 +416,6 @@ func applyWindow(r resolved, taps []float64) {
 	for i := range taps {
 		taps[i] *= coefficients[i]
 	}
-}
-
-func complexAbs(value complex128) float64 {
-	return math.Hypot(real(value), imag(value))
 }
 
 // measure compares the combined dB response with the target curve over the

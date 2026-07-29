@@ -290,44 +290,56 @@ The five 257-tap reference prototypes are:
 The CSV records relative linear-magnitude error; RMS and maximum dB error at
 the `Analyze` -120 dB floor; weighted group-delay mean, RMS ripple, and peak;
 peak index, energy centroid, and energy before the peak; coefficient peak and
-dynamic range; iterations; constraint violation; and runtime. Coefficient
-range is the peak divided by the smallest coefficient no more than 240 dB
-below it. Group-delay bins below `1e-6` absolute magnitude are excluded because
-phase at a null is not meaningful.
+dynamic range; iterations; and constraint violation. Coefficient range is the
+peak divided by the smallest coefficient no more than 240 dB below it.
+Group-delay bins below `1e-6` absolute magnitude are excluded because phase at
+a null is not meaningful.
+
+It records no timing. Wall-clock measurements are machine-dependent, so a
+runtime column would make the file differ on every run and destroy its value as
+the committed regression golden. Timings live in
+[`reference-timings.csv`](reference-timings.csv), which records the machine and
+toolchain alongside each measurement and is regenerated only by
+`just compare-timings` — never by `just compare`, and never checked for
+reproducibility.
 
 ### Results
 
 The compact table shows the principal trade-offs; the committed
 [`reference-results.csv`](reference-results.csv) contains every metric. Relative
-error and pre-peak energy are percentages. Runtime is the fastest of three
-complete design calls on Go 1.26.1/linux-amd64 on a 12th-generation Intel
-Core i7-1255U; it is a machine-local comparison, while all quality columns are
-golden-tested independently of runtime.
+error and pre-peak energy are percentages. Every column here is golden-tested:
+`just compare-check` regenerates the table and fails if a single byte moves.
+
+For the cost side of the trade-off see
+[`reference-timings.csv`](reference-timings.csv), which reports the fastest of
+five complete design calls together with the machine and toolchain that
+produced them. Those numbers are a machine-local comparison between methods and
+are not reproducible across machines.
 
 <!-- reference-results:start -->
 
-| Target          | Method              | Rel. error | Mean delay | Pre-peak |   Runtime |
-| :-------------- | :------------------ | ---------: | ---------: | -------: | --------: |
-| low-pass        | Budde iterative     |   0.00010% |      21.86 |   17.74% |   0.72 ms |
-|                 | phase interpolation |   0.22262% |      20.40 |    1.74% |   0.28 ms |
-|                 | complex minimax     |   0.40294% |      20.39 |    1.74% |   5.94 ms |
-|                 | low group delay     |  22.79885% |       1.76 |   24.37% |  81.63 ms |
-| parametric EQ   | Budde iterative     |   0.07904% |      22.21 |    0.00% |   0.53 ms |
-|                 | phase interpolation |   1.35975% |      20.94 |    0.16% |   0.16 ms |
-|                 | complex minimax     |   2.58983% |      20.79 |    0.31% |   5.67 ms |
-|                 | low group delay     |  21.59908% |       1.93 |    0.00% | 100.55 ms |
-| crossover       | Budde iterative     |   0.00001% |      26.41 |   44.77% |   0.92 ms |
-|                 | phase interpolation |   0.07248% |      23.81 |   39.34% |   0.28 ms |
-|                 | complex minimax     |   0.09716% |      23.81 |   39.35% |   6.77 ms |
-|                 | low group delay     |   7.11710% |       9.73 |   35.27% | 143.78 ms |
-| deep notch      | Budde iterative     |   0.14710% |      25.19 |    0.01% |   1.72 ms |
-|                 | phase interpolation |   0.62083% |      22.55 |    0.00% |   0.20 ms |
-|                 | complex minimax     |   1.03374% |      22.50 |    0.02% |   8.19 ms |
-|                 | low group delay     |   3.53804% |       6.67 |    0.00% | 191.20 ms |
-| room correction | Budde iterative     |   0.13143% |      16.50 |    0.00% |   2.27 ms |
-|                 | phase interpolation |   0.28140% |      16.38 |    0.06% |   0.18 ms |
-|                 | complex minimax     |   0.67989% |      16.38 |    0.06% |   7.07 ms |
-|                 | low group delay     |   8.63192% |       0.10 |    0.00% |  89.70 ms |
+| Target          | Method              | Rel. error | Mean delay | Pre-peak |
+| :-------------- | :------------------ | ---------: | ---------: | -------: |
+| low-pass        | Budde iterative     |   0.00010% |      21.86 |   17.74% |
+|                 | phase interpolation |   0.22262% |      20.40 |    1.74% |
+|                 | complex minimax     |   0.40294% |      20.39 |    1.74% |
+|                 | low group delay     |  22.79885% |       1.76 |   24.37% |
+| parametric EQ   | Budde iterative     |   0.07904% |      22.21 |    0.00% |
+|                 | phase interpolation |   1.35975% |      20.94 |    0.16% |
+|                 | complex minimax     |   2.58983% |      20.79 |    0.31% |
+|                 | low group delay     |  21.59908% |       1.93 |    0.00% |
+| crossover       | Budde iterative     |   0.00001% |      26.41 |   44.77% |
+|                 | phase interpolation |   0.07248% |      23.81 |   39.34% |
+|                 | complex minimax     |   0.09716% |      23.81 |   39.35% |
+|                 | low group delay     |   7.11710% |       9.73 |   35.27% |
+| deep notch      | Budde iterative     |   0.14710% |      25.19 |    0.01% |
+|                 | phase interpolation |   0.62083% |      22.55 |    0.00% |
+|                 | complex minimax     |   1.03374% |      22.50 |    0.02% |
+|                 | low group delay     |   3.53804% |       6.67 |    0.00% |
+| room correction | Budde iterative     |   0.13143% |      16.50 |    0.00% |
+|                 | phase interpolation |   0.28140% |      16.38 |    0.06% |
+|                 | complex minimax     |   0.67989% |      16.38 |    0.06% |
+|                 | low group delay     |   8.63192% |       0.10 |    0.00% |
 
 <!-- reference-results:end -->
 

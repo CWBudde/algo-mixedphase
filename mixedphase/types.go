@@ -39,6 +39,20 @@ var (
 	ErrInvalidTolerance = errors.New(
 		"mixedphase: magnitude tolerance must not be negative",
 	)
+	// ErrInvalidIterations is returned when a negative iteration or stage count
+	// is given for a budget that has no "run until convergence" meaning.
+	ErrInvalidIterations = errors.New(
+		"mixedphase: iteration count must not be negative",
+	)
+	// ErrInvalidPenalty is returned when a negative constraint penalty is given.
+	ErrInvalidPenalty = errors.New(
+		"mixedphase: penalty must not be negative",
+	)
+	// ErrZeroResponse is returned when a reference or prescribed response has no
+	// energy at all, which leaves every relative error undefined.
+	ErrZeroResponse = errors.New(
+		"mixedphase: response is identically zero",
+	)
 )
 
 // MinimumPhaseMethod selects how a magnitude response is factored into a

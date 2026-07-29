@@ -225,6 +225,69 @@ func TestMinimaxToleranceStopsEarly(t *testing.T) {
 	}
 }
 
+// TestMinimaxIterationsCountsAppliedReweights pins what Result.Iterations
+// means: the number of Lawson reweights actually applied, not the number of
+// passes entered. The distinction only shows up when the tolerance stops the
+// loop, because the pass that triggers the stop returns before reweighting.
+//
+// Re-running with the reported count as a hard budget and early stopping
+// disabled must therefore reproduce the design exactly — it performs the same
+// solves and the same reweights.
+func TestMinimaxIterationsCountsAppliedReweights(t *testing.T) {
+	prototype := lowpassPrototype(129, 0.12)
+
+	base := ComplexLeastSquaresConfig{
+		Length:            65,
+		Mix:               0.3,
+		FFTSize:           2048,
+		MinimaxIterations: 50,
+		MinimaxTolerance:  1e-2,
+	}
+
+	stopped, err := DesignComplexLeastSquares(prototype, base)
+	if err != nil {
+		t.Fatalf("DesignComplexLeastSquares(stopped) error = %v", err)
+	}
+
+	if stopped.Iterations >= base.MinimaxIterations {
+		t.Fatalf(
+			"Iterations = %d, want early stopping below %d",
+			stopped.Iterations,
+			base.MinimaxIterations,
+		)
+	}
+
+	replay := base
+	replay.MinimaxIterations = stopped.Iterations
+	replay.MinimaxTolerance = -1
+
+	replayed, err := DesignComplexLeastSquares(prototype, replay)
+	if err != nil {
+		t.Fatalf("DesignComplexLeastSquares(replayed) error = %v", err)
+	}
+
+	if replayed.Iterations != stopped.Iterations {
+		t.Fatalf(
+			"replayed Iterations = %d, want %d",
+			replayed.Iterations,
+			stopped.Iterations,
+		)
+	}
+
+	for i := range stopped.Taps {
+		if stopped.Taps[i] != replayed.Taps[i] {
+			t.Fatalf(
+				"tap %d = %g after early stopping, %g when replayed with "+
+					"%d reweights: Iterations does not count applied reweights",
+				i,
+				stopped.Taps[i],
+				replayed.Taps[i],
+				stopped.Iterations,
+			)
+		}
+	}
+}
+
 // TestWeightShapesErrorDistribution verifies that the weight vector does what
 // it promises: emphasising a band lowers the error there at the expense of the
 // rest of the grid.
@@ -410,7 +473,7 @@ func TestComplexLeastSquaresValidation(t *testing.T) {
 		{
 			"negative iterations",
 			ComplexLeastSquaresConfig{MinimaxIterations: -1},
-			ErrInvalidLength,
+			ErrInvalidIterations,
 		},
 		{
 			"short weight",

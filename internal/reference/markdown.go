@@ -53,7 +53,6 @@ func markdownTable(rows []Row) string {
 		"Rel. error",
 		"Mean delay",
 		"Pre-peak",
-		"Runtime",
 	}
 	tableRows := make([][]string, 0, len(rows))
 
@@ -77,7 +76,6 @@ func markdownTable(rows []Row) string {
 			fmt.Sprintf("%.5f%%", 100*row.RelativeMagnitudeError),
 			fmt.Sprintf("%.2f", row.MeanGroupDelay),
 			fmt.Sprintf("%.2f%%", 100*row.PrePeakEnergyRatio),
-			fmt.Sprintf("%.2f ms", float64(row.Runtime.Microseconds())/1000),
 		}
 		tableRows = append(tableRows, values)
 

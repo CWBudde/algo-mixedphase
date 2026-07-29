@@ -1,75 +1,34 @@
-#import "style.typ": abstract, code-path, draft-note, paper
+#import "charts.typ": accuracy-delay-chart, graphiceq-chart, pre-ringing-chart
+#import "style.typ": code-path, draft-note, paper
 
 #let revision = sys.inputs.at("revision", default: "working tree")
 #let reference-results = csv("../reference-results.csv", row-type: dictionary)
-
-#let method-name(value) = if value == "budde-iterative" {
-  "Alternating"
-} else if value == "phase-interpolation" {
-  "Phase interpolation"
-} else if value == "complex-minimax" {
-  "Complex minimax"
-} else if value == "low-group-delay" {
-  "Low group delay"
-} else {
-  value
-}
-
-#let rounded(value, digits: 2) = str(calc.round(float(value), digits: digits))
-#let percent(value, digits: 2) = (
-  rounded(
-    float(value) * 100,
-    digits: digits,
-  )
-    + "%"
-)
-#let milliseconds(value) = rounded(float(value) / 1000) + " ms"
-
-#let result-table(target) = {
-  let rows = reference-results.filter(row => row.at("target") == target)
-  table(
-    columns: (1.35fr, 0.9fr, 0.8fr, 0.8fr, 0.8fr),
-    align: (left, right, right, right, right),
-    table.header([Method], [Rel. error], [Mean delay], [Pre-peak], [Runtime]),
-    ..rows
-      .map(row => (
-        [#method-name(row.at("method"))],
-        [#percent(row.at("relative_magnitude_error"), digits: 4)],
-        [#rounded(row.at("mean_group_delay"))],
-        [#percent(row.at("pre_peak_energy_ratio"))],
-        [#milliseconds(row.at("runtime_us"))],
-      ))
-      .flatten(),
-  )
-}
+#let graphiceq-results = csv("../graphiceq-results.csv", row-type: dictionary)
 
 #show: paper.with(
   title: "Fixed-Support Mixed-Phase FIR Filter Design",
   subtitle: "A reproducible revision and comparison of latency–accuracy trade-offs",
   author: "Christian-W. Budde",
   revision: revision,
+  abstract-body: [
+    Linear-phase finite impulse response filters offer constant group delay but
+    spend half their support before the impulse-response centre. Minimum-phase
+    filters minimise delay but accept frequency-dependent phase. This paper
+    revisits an alternating factorisation proposed at DAGA 2012 that divides a
+    fixed support between minimum- and linear-phase factors. The revised
+    treatment makes the support and stopping rules explicit and places the
+    method beside phase interpolation, weighted complex approximation, direct
+    low-group-delay optimisation, and a structure-specific hybrid graphic
+    equaliser. All implementations and measurements are maintained in a public
+    Go repository so that each quantitative claim can be traced to a test or a
+    committed comparison artifact.
+  ],
+  status-body: [
+    This is a working English revision. Its charts are generated from the
+    committed reference CSVs during the Typst build. The full cross-target
+    argument and audited conclusions remain open.
+  ],
 )
-
-#abstract[
-  Linear-phase finite impulse response filters offer constant group delay but
-  spend half their support before the impulse-response centre. Minimum-phase
-  filters minimise delay but accept frequency-dependent phase. This paper
-  revisits an alternating factorisation proposed at DAGA 2012 that divides a
-  fixed support between minimum- and linear-phase factors. The revised
-  treatment makes the support and stopping rules explicit and places the
-  method beside phase interpolation, weighted complex approximation, direct
-  low-group-delay optimisation, and a structure-specific hybrid graphic
-  equaliser. All implementations and measurements are maintained in a public
-  Go repository so that each quantitative claim can be traced to a test or a
-  committed comparison artifact.
-]
-
-#draft-note[
-  This is the first compilable English draft. The method description and
-  evidence map follow the implementation, and the first result table is read
-  directly from the committed reference CSV. Generated plots, the complete
-  paper result set, and audited conclusions remain open.
-]
 
 = Introduction
 
@@ -255,62 +214,93 @@ and perceptually irrelevant. Runtime comparisons will state the machine and
 toolchain; the paper build consumes committed benchmark artifacts and never
 reruns timing measurements.
 
-== First data-backed result
+== Data-backed trade-offs
 
-@low-pass-table is rendered directly from
-#code-path("docs/reference-results.csv"). No result value is copied into the
-Typst source. This first slice establishes the data path while the generated
-plots and the cross-target discussion are being prepared.
+The plots in @accuracy-delay and @pre-ringing are rendered directly from
+#code-path("docs/reference-results.csv"). No plotted value is copied into the
+Typst source. Colour is backed by marker shape or hatch pattern so the figures
+remain legible when printed in greyscale.
 
 #figure(
-  result-table("low-pass"),
+  accuracy-delay-chart(reference-results),
   caption: [
-    Low-pass slice of the common reference suite. Relative error and pre-peak
-    energy are percentages; delay is in samples. Runtime is machine-local.
+    Magnitude-accuracy versus mean-delay trade-off over all five reference
+    targets. Each point is a realised 129-tap design on the common 1024-point
+    grid; the error axis is logarithmic. Shape and colour identify the method.
   ],
-) <low-pass-table>
+) <accuracy-delay>
+
+The phase-free designs occupy the low-delay side of @accuracy-delay by allowing
+substantially more magnitude error. The alternating method occupies the
+high-accuracy region, but usually at a greater mean delay than direct phase
+interpolation. This plot is descriptive rather than a universal ranking:
+targets differ in difficulty, and the methods do not optimise the same norm.
+
+#figure(
+  pre-ringing-chart(reference-results),
+  caption: [
+    Energy before the realised impulse-response peak for the five reference
+    targets (LP: low-pass; PEQ: parametric EQ; XO: crossover). Colour and hatch
+    pattern identify the method.
+  ],
+) <pre-ringing>
+
+@pre-ringing shows why mean delay alone is not a sufficient temporal metric.
+The alternating crossover result has substantial energy ahead of its peak,
+while several equaliser and notch cases concentrate almost all energy at or
+after the peak. The paper therefore reports both delay and energy distribution.
+
+== Structure-specific latency and accuracy
+
+The graphic-equaliser comparison is read from
+#code-path("docs/graphiceq-results.csv"). It is kept separate from the general
+FIR comparison because offloading low bands to IIR shelves changes the
+structure and the applicable target class.
+
+#figure(
+  graphiceq-chart(graphiceq-results),
+  caption: [
+    RMS magnitude error versus realised latency for the hybrid octave graphic
+    equaliser and an all-FIR design constrained to the same latency. Markers
+    are discrete implemented configurations, not a continuous design curve.
+  ],
+) <graphiceq-tradeoff>
+
+At each shared latency in @graphiceq-tradeoff, the hybrid structure has lower
+RMS error than the shortened all-FIR alternative. This does not generalise to
+arbitrary targets: the shelf cascade cannot reproduce a rapidly alternating
+octave-band “zigzag” without large interaction error.
 
 #draft-note[
-  A single target is not a method ranking. The final evaluation will include
-  all five targets, configuration budgets in every caption, generated response
-  and impulse plots, and the documented failure cases.
+  The final evaluation will add generated magnitude, group-delay, and
+  peak-aligned impulse-response plots for representative targets, with the
+  optimiser budget stated in every caption.
 ]
 
 = Reproducibility map
 
-#text(size: 8.3pt)[
-  #table(
-    columns: (1.05fr, 1.65fr, 1.3fr),
-    table.header([Paper item], [Implementation], [Evidence or regeneration]),
-    [Support split @support-split],
-    [#code-path("mixedphase/iterative.go")],
-    [#code-path("mixedphase/mixedphase_test.go")],
+#text(size: 8.4pt)[
+  #set par(justify: false, leading: 0.45em)
 
-    [Alternating factorisation],
-    [#code-path("mixedphase.DesignIterative")],
-    [`go test ./mixedphase`],
-
-    [Minimum-phase reconstruction],
-    [#code-path("mixedphase.MinimumPhaseWith")],
-    [`go test ./mixedphase`],
-
-    [Prescribed complex response],
-    [#code-path("mixedphase.DesignComplexLeastSquares")],
-    [`go test ./mixedphase`],
-
-    [Low-group-delay optimisation],
-    [#code-path("mixedphase.DesignLowGroupDelay")],
-    [`go test ./mixedphase`],
-
-    [Hybrid graphic equaliser],
-    [#code-path("graphiceq.Design")],
-    [`go test ./graphiceq`],
-
-    [Cross-method CSV], [#code-path("examples/mixedphase")], [`just compare`],
-    [Native/WASM agreement],
-    [#code-path("scripts/test-cross-build.sh")],
-    [`just test-cross-build`],
-  )
+  - *Support split @support-split:* #code-path("mixedphase/iterative.go");
+    asserted in #code-path("mixedphase/mixedphase_test.go").
+  - *Alternating factorisation:* #code-path("mixedphase.DesignIterative");
+    `go test ./mixedphase`.
+  - *Minimum-phase reconstruction:* #code-path("mixedphase.MinimumPhaseWith");
+    `go test ./mixedphase`.
+  - *Prescribed complex response:*
+    #code-path("mixedphase.DesignComplexLeastSquares"); `go test ./mixedphase`.
+  - *Low-group-delay optimisation:*
+    #code-path("mixedphase.DesignLowGroupDelay"); `go test ./mixedphase`.
+  - *Hybrid graphic equaliser:* #code-path("graphiceq.Design");
+    `go test ./graphiceq`.
+  - *Accuracy-delay and pre-ringing plots (@accuracy-delay; @pre-ringing):*
+    #code-path("docs/reference-results.csv"); `just paper-refresh`.
+  - *Graphic-EQ plot (@graphiceq-tradeoff):*
+    #code-path("docs/graphiceq-results.csv");
+    `just paper-refresh`.
+  - *Native/WASM agreement:* #code-path("scripts/test-cross-build.sh");
+    `just test-cross-build`.
 ]
 
 The build embeds the repository revision shown on the title page. The Typst
@@ -331,7 +321,8 @@ are outside the present scope.
 Mixed-phase FIR design is not one optimisation problem but a family of choices
 about which phase information to preserve, which error to minimise, and how to
 spend finite support. The revised paper makes those choices explicit and binds
-its evidence to executable designs. Final conclusions will be added only after
-the common benchmark artifacts can reproduce them.
+its evidence to executable designs. Final conclusions will follow after the
+full cross-target analysis and representative response plots have been
+technically reviewed.
 
 #bibliography("references.bib", style: "ieee", title: "References")

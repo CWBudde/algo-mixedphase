@@ -1,11 +1,15 @@
 package reference
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/cwbudde/algo-mixedphase/mixedphase"
 )
+
+// ErrInvalidTrials is returned when a negative trial count is requested.
+var ErrInvalidTrials = errors.New("reference: trials must not be negative")
 
 type designMethod struct {
 	name   string
@@ -17,7 +21,7 @@ type designMethod struct {
 // timing; a positive value reports the fastest of that many complete designs.
 func Run(trials int) ([]Row, error) {
 	if trials < 0 {
-		return nil, fmt.Errorf("reference: trials must not be negative")
+		return nil, fmt.Errorf("%w: got %d", ErrInvalidTrials, trials)
 	}
 
 	targets, err := Targets()

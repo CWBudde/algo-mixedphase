@@ -10,6 +10,114 @@ import (
 	"github.com/cwbudde/algo-dsp/dsp/window"
 )
 
+// TestFactorWindowsDifferInSlope pins the only reason applyMinimumWindow and
+// applyLinearWindow are separate functions: the minimum-phase factor is causal
+// with its energy at the front, so it may only be tapered on the right, while
+// the linear-phase residual is symmetric about its centre and is tapered on
+// both edges. Tapering the head of the minimum-phase factor would attack
+// exactly the samples that carry the response.
+func TestFactorWindowsDifferInSlope(t *testing.T) {
+	const length = 33
+
+	ones := func() []float64 {
+		out := make([]float64, length)
+		for i := range out {
+			out[i] = 1
+		}
+
+		return out
+	}
+
+	cfg := IterativeConfig{Window: window.TypeHann}
+
+	minimumPart := ones()
+	applyMinimumWindow(minimumPart, cfg)
+
+	linearPart := ones()
+	applyLinearWindow(linearPart, cfg)
+
+	const unity = 1e-9
+
+	if math.Abs(minimumPart[0]-1) > unity {
+		t.Errorf(
+			"minimum-phase factor head = %g, want an untouched 1: a right "+
+				"slope must not taper the leading samples",
+			minimumPart[0],
+		)
+	}
+
+	if minimumPart[length-1] >= 1-unity {
+		t.Errorf(
+			"minimum-phase factor tail = %g, want a taper below 1",
+			minimumPart[length-1],
+		)
+	}
+
+	if linearPart[0] >= 1-unity || linearPart[length-1] >= 1-unity {
+		t.Errorf(
+			"linear-phase factor edges = %g/%g, want both tapered below 1",
+			linearPart[0],
+			linearPart[length-1],
+		)
+	}
+
+	if math.Abs(linearPart[0]-linearPart[length-1]) > unity {
+		t.Errorf(
+			"linear-phase factor edges = %g/%g, want a symmetric taper",
+			linearPart[0],
+			linearPart[length-1],
+		)
+	}
+}
+
+// TestFactorWindowAlphaAndRectangular covers the two remaining branches of the
+// factor windows: the rectangular early return, and the parametric path that
+// forwards WindowAlpha as the window's alpha/beta parameter.
+func TestFactorWindowAlphaAndRectangular(t *testing.T) {
+	const length = 33
+
+	ones := func() []float64 {
+		out := make([]float64, length)
+		for i := range out {
+			out[i] = 1
+		}
+
+		return out
+	}
+
+	rectangular := ones()
+	applyMinimumWindow(rectangular, IterativeConfig{})
+	applyLinearWindow(rectangular, IterativeConfig{})
+
+	for i, value := range rectangular {
+		if value != 1 {
+			t.Fatalf("rectangular window changed tap %d to %g", i, value)
+		}
+	}
+
+	narrow := ones()
+	applyLinearWindow(
+		narrow,
+		IterativeConfig{Window: window.TypeKaiser, WindowAlpha: 2},
+	)
+
+	wide := ones()
+	applyLinearWindow(
+		wide,
+		IterativeConfig{Window: window.TypeKaiser, WindowAlpha: 12},
+	)
+
+	// A larger Kaiser beta is a narrower window, so its edges sit lower.
+	if wide[0] >= narrow[0] {
+		t.Errorf(
+			"Kaiser beta 12 edge = %g, want below the beta 2 edge %g: "+
+				"WindowAlpha is not reaching the window",
+			wide[0],
+			narrow[0],
+		)
+	}
+}
+
 func TestMinimumPhaseMovesEnergyForward(t *testing.T) {
 	prototype := lowpassPrototype(129, 0.12)
 
@@ -125,6 +233,105 @@ func TestIterativeZeroDelayIsMinimumPhaseEndpoint(t *testing.T) {
 				want[i],
 			)
 		}
+	}
+}
+
+// TestIterativeMaximumDelayIsLinearPhaseEndpoint covers the opposite endpoint
+// to TestIterativeZeroDelayIsMinimumPhaseEndpoint. At Delay = (Length-1)/2 the
+// linear factor consumes the whole budget, the minimum-phase factor collapses
+// to the identity, and no alternating correction is possible — the design must
+// return a symmetric linear-phase FIR in one pass.
+func TestIterativeMaximumDelayIsLinearPhaseEndpoint(t *testing.T) {
+	const length = 129
+
+	prototype := lowpassPrototype(length, 0.12)
+
+	result, err := DesignIterative(prototype, IterativeConfig{
+		Length:  length,
+		Delay:   (length - 1) / 2,
+		FFTSize: 4096,
+	})
+	if err != nil {
+		t.Fatalf("DesignIterative() error = %v", err)
+	}
+
+	if len(result.MinimumPhasePart) != 1 ||
+		result.MinimumPhasePart[0] != 1 {
+		t.Fatalf(
+			"MinimumPhasePart = %v, want identity factor",
+			result.MinimumPhasePart,
+		)
+	}
+
+	if len(result.Taps) != length {
+		t.Fatalf("len(Taps) = %d, want %d", len(result.Taps), length)
+	}
+
+	if result.Iterations != 0 {
+		t.Errorf(
+			"Iterations = %d, want 0: the endpoint admits no correction",
+			result.Iterations,
+		)
+	}
+
+	for i := range length / 2 {
+		mirrored := length - 1 - i
+		if math.Abs(result.Taps[i]-result.Taps[mirrored]) > 1e-12 {
+			t.Fatalf(
+				"Taps[%d] = %.16g and Taps[%d] = %.16g are not symmetric",
+				i,
+				result.Taps[i],
+				mirrored,
+				result.Taps[mirrored],
+			)
+		}
+	}
+}
+
+// TestAnalyzeValidation covers the public metric entry point's guards,
+// including the zero-response case that leaves every relative error undefined.
+func TestAnalyzeValidation(t *testing.T) {
+	prototype := lowpassPrototype(33, 0.2)
+
+	tests := []struct {
+		name      string
+		reference []float64
+		candidate []float64
+		fftSize   int
+		want      error
+	}{
+		{
+			name:      "empty reference",
+			candidate: prototype,
+			want:      ErrEmptyPrototype,
+		},
+		{
+			name:      "empty candidate",
+			reference: prototype,
+			want:      ErrInvalidLength,
+		},
+		{
+			name:      "grid shorter than the signals",
+			reference: prototype,
+			candidate: prototype,
+			fftSize:   8,
+			want:      ErrInvalidLength,
+		},
+		{
+			name:      "silent reference",
+			reference: make([]float64, len(prototype)),
+			candidate: prototype,
+			want:      ErrZeroResponse,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Analyze(test.reference, test.candidate, test.fftSize)
+			if !errors.Is(err, test.want) {
+				t.Errorf("Analyze() error = %v, want %v", err, test.want)
+			}
+		})
 	}
 }
 

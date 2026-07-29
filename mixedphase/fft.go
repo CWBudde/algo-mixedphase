@@ -5,66 +5,36 @@ import (
 	"math"
 	"math/cmplx"
 
-	algofft "github.com/cwbudde/algo-fft"
+	"github.com/cwbudde/algo-mixedphase/internal/fftx"
 )
 
+// fftWorkspace adapts [fftx.Workspace] to this package's short call sites and
+// its error prefix.
 type fftWorkspace struct {
+	*fftx.Workspace
+
 	size int
-	plan *algofft.Plan[complex128]
 }
 
 func newFFTWorkspace(size int) (*fftWorkspace, error) {
-	plan, err := algofft.NewPlan64(size)
+	workspace, err := fftx.New(size, "mixedphase")
 	if err != nil {
-		return nil, fmt.Errorf("mixedphase: create FFT plan: %w", err)
+		return nil, err
 	}
 
-	return &fftWorkspace{size: size, plan: plan}, nil
+	return &fftWorkspace{Workspace: workspace, size: size}, nil
 }
 
 func (w *fftWorkspace) forwardReal(input []float64) ([]complex128, error) {
-	src := make([]complex128, w.size)
-	for i := 0; i < len(input) && i < w.size; i++ {
-		src[i] = complex(input[i], 0)
-	}
-
-	dst := make([]complex128, w.size)
-	if err := w.plan.Forward(dst, src); err != nil {
-		return nil, fmt.Errorf("mixedphase: forward FFT: %w", err)
-	}
-
-	return dst, nil
+	return w.ForwardReal(input)
 }
 
 func (w *fftWorkspace) forwardComplex(input []complex128) ([]complex128, error) {
-	src := make([]complex128, w.size)
-	copy(src, input)
-
-	dst := make([]complex128, w.size)
-
-	if err := w.plan.Forward(dst, src); err != nil {
-		return nil, fmt.Errorf("mixedphase: forward FFT: %w", err)
-	}
-
-	return dst, nil
+	return w.ForwardComplex(input)
 }
 
 func (w *fftWorkspace) inverseReal(input []complex128) ([]float64, error) {
-	src := make([]complex128, w.size)
-	copy(src, input)
-
-	dst := make([]complex128, w.size)
-
-	if err := w.plan.Inverse(dst, src); err != nil {
-		return nil, fmt.Errorf("mixedphase: inverse FFT: %w", err)
-	}
-
-	out := make([]float64, w.size)
-	for i := range out {
-		out[i] = real(dst[i])
-	}
-
-	return out, nil
+	return w.InverseReal(input)
 }
 
 func magnitude(spectrum []complex128) []float64 {
@@ -261,14 +231,7 @@ func nextDesignFFTSize(filterLength, requested int) (int, error) {
 		return requested, nil
 	}
 
-	target := max(16, 8*filterLength)
-
-	size := 1
-	for size < target {
-		size <<= 1
-	}
-
-	return size, nil
+	return fftx.NextPowerOfTwo(filterLength, 16), nil
 }
 
 func defaultEpsilon(targetMagnitude []float64, requested float64) float64 {

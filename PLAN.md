@@ -136,9 +136,18 @@ quantitative results and conclusions.
 Paper and evidence:
 
 - [x] Create a maintainable Typst source tree with a single entry point, shared style and
-      notation definitions, a BibTeX bibliography, and a generated-figure directory. Keep
-      the original German DAGA paper as a cited historical source; only redistribute its
-      PDF if its publication terms permit that.
+      notation definitions, a BibTeX bibliography, native chart helpers, and a directory
+      reserved for externally generated figures. Keep the original German DAGA paper as a
+      cited historical source; only redistribute its PDF if its publication terms permit
+      that.
+- [x] Establish an AES-informed author-manuscript design with a full-width title and
+      abstract, a two-column body, numbered sections and figures, bracketed references,
+      and figure encodings that remain distinguishable in greyscale. Do not reproduce the
+      protected AES publication header or imply that the working paper is an AES preprint.
+- [x] Add the first data-backed chart set in Typst: accuracy versus mean delay, energy
+      before the impulse-response peak, and the hybrid graphic-EQ latency/error trade-off.
+      Read both committed Phase 3 CSVs directly so a normal paper build has no chart
+      runtime dependency.
 - [ ] Produce a revised English treatment, not merely a translation. Clearly separate the
       2012 alternating-factorisation contribution from the later implementations,
       baselines, and comparative results added by this repository.
@@ -146,10 +155,11 @@ Paper and evidence:
       reproducibility appendix mapping each algorithm, numbered result, figure, and table
       to its implementation, test or Phase 3 CSV, configuration budget, and regeneration
       command.
-- [ ] Generate plots and result tables from the committed Phase 3 data; do not hand-edit
-      values into Typst. Record tap counts, delay constraints, frequency grids, weights,
-      tolerances, iteration limits, and the repository commit in the paper metadata or
-      captions.
+- [ ] Complete the plots and result tables from the committed Phase 3 data; do not
+      hand-edit values into Typst. Add representative magnitude, group-delay, and
+      peak-aligned impulse-response figures, then record tap counts, delay constraints,
+      frequency grids, weights, tolerances, iteration limits, and the repository commit in
+      the paper metadata or captions.
 - [ ] Give failure modes the same visibility as successful cases: correction-loop
       instability, optimiser initialisation sensitivity, zero-weight bins, unreliable
       stopband group delay, and target classes that do not fit the hybrid graphic-EQ
@@ -160,7 +170,7 @@ Build and publication:
 - [x] Add `just paper` and `just paper-watch`. A normal paper build consumes committed
       benchmark artifacts and produces `docs/paper/mixed-phase-filter-design-en.pdf`
       without rerunning timing benchmarks.
-- [ ] Add the data/figure refresh recipe for the committed Phase 3 CSVs.
+- [x] Add the data/figure refresh recipe for the committed Phase 3 CSVs.
 - [x] Add Typst formatting to `treefmt.toml` with `typstyle`, and pin the Typst compiler and
       all imported Typst package versions used locally and in CI.
 - [x] Add a clean-checkout CI job that formats/checks the sources, compiles the paper, and

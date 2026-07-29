@@ -14,8 +14,20 @@ linters:
     - unused
     - wsl_v5
 
+    # errorlint guards the sentinel convention in AGENTS.md: every error a
+    # caller might match must be wrapped with %w, never formatted with %v or
+    # built by a verb-less fmt.Errorf.
+    - errorlint
+    # exhaustive guards the MinimumPhaseMethod switches, which must gain an arm
+    # whenever a reconstruction method is added.
+    - exhaustive
+
     - revive
   settings:
+    exhaustive:
+      # The switches here all have a default arm that returns ErrInvalidMethod
+      # for an out-of-range value, which is the behaviour the tests pin.
+      default-signifies-exhaustive: true
     # varnamelen is intentionally not enabled: this is a numerical DSP library
     # whose short identifiers (M, K, G0, Gb, b0, a1, ...) mirror the reference
     # equations documented alongside the code. varnamelen flagged ~300 such

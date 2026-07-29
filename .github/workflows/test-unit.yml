@@ -8,23 +8,37 @@ permissions:
 
 jobs:
   test:
-    name: Test (Go ${{ matrix.go-version }})
+    name: Test
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        go-version: ["1.24.x", "1.25.x"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Only one Go version is tested: algo-dsp and algo-fft both declare
+      # `go 1.25.0`, so a "previous stable" job would silently download 1.25
+      # through GOTOOLCHAIN and test nothing extra.
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version-file: go.mod
+
+      - name: Install Just
+        uses: extractions/setup-just@v2
 
       - name: Test
         run: go test ./...
+
+      - name: Test with race detector
+        run: go test -race ./...
+
+      - name: Coverage floor
+        run: just check-coverage
+
+      - name: Comparison reproducibility
+        run: just compare-check
+
+      - name: Module tidiness
+        run: just check-tidy
 
       - name: Cross-build determinism
         run: ./scripts/test-cross-build.sh

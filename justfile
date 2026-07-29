@@ -52,6 +52,27 @@ test-coverage:
     go test -v -coverprofile=coverage.out ./...
     go tool cover -html=coverage.out -o coverage.html
 
+# Enforce the AGENTS.md coverage floor on the two public packages
+check-coverage:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    floor=90
+    status=0
+    workdir="$(mktemp -d)"
+    trap 'rm -rf "$workdir"' EXIT
+    for pkg in mixedphase graphiceq; do
+        profile="${workdir}/${pkg}.out"
+        go test "./${pkg}/" -coverprofile="$profile" >/dev/null
+        percent="$(go tool cover -func="$profile" | awk '/^total:/ {print $3}' | tr -d '%')"
+        if awk "BEGIN{exit !($percent < $floor)}"; then
+            echo "FAIL ${pkg}: ${percent}% is below the ${floor}% floor" >&2
+            status=1
+        else
+            echo "ok   ${pkg}: ${percent}%"
+        fi
+    done
+    exit "$status"
+
 # Run benchmarks
 bench:
     go test -run=^$ -bench=. -benchmem ./...
@@ -66,6 +87,23 @@ compare:
         -document docs/MIXED_PHASE_FILTER_DESIGN.md \
         > docs/reference-results.csv
     go run ./examples/graphiceq > docs/graphiceq-results.csv
+
+# Refresh the wall-clock measurements. Deliberately excluded from `compare` and
+# from `compare-check`: these numbers are machine-dependent by nature, and are
+# only meaningful alongside the machine and toolchain recorded in the file.
+compare-timings trials="5":
+    go run ./examples/mixedphase \
+        -trials {{ trials }} \
+        -timings docs/reference-timings.csv \
+        > /dev/null
+
+# Prove the committed comparison artifacts are reproducible
+compare-check:
+    just compare
+    git diff --exit-code -- \
+        docs/reference-results.csv \
+        docs/graphiceq-results.csv \
+        docs/MIXED_PHASE_FILTER_DESIGN.md
 
 # Verify the pinned paper compiler is available
 paper-check-tools:
@@ -88,8 +126,13 @@ paper-watch: paper-check-tools
         --input revision="working-tree" \
         {{ paper_source }} {{ paper_output }}
 
-# Run all checks (formatting, linting, tests, tidiness)
-ci: check-formatted test test-cross-build test-web lint check-tidy
+# Refresh benchmark CSVs explicitly, then rebuild every data-backed chart
+paper-refresh:
+    just compare
+    just paper
+
+# Run all checks (formatting, linting, tests, tidiness, reproducibility)
+ci: check-formatted test test-cross-build test-web lint check-tidy check-coverage compare-check
 
 # Clean build artifacts
 clean:

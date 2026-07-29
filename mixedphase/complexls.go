@@ -53,8 +53,8 @@ func DesignComplexLeastSquares(
 
 	if cfg.MinimaxIterations < 0 {
 		return Result{}, fmt.Errorf(
-			"%w: minimax iterations must not be negative, got %d",
-			ErrInvalidLength,
+			"%w: minimax iterations is %d",
+			ErrInvalidIterations,
 			cfg.MinimaxIterations,
 		)
 	}
@@ -115,9 +115,7 @@ func DesignComplexLeastSquares(
 	}
 
 	if reference == 0 {
-		return Result{}, fmt.Errorf(
-			"mixedphase: prescribed response is identically zero",
-		)
+		return Result{}, fmt.Errorf("%w: prescribed response", ErrZeroResponse)
 	}
 
 	taps, complexError, iterations, err := solveWeighted(
@@ -190,8 +188,6 @@ func solveWeighted(
 			break
 		}
 
-		performed = pass + 1
-
 		if tolerance >= 0 &&
 			math.Abs(previousPeak-current.Peak) <= tolerance*current.Peak {
 			break
@@ -200,6 +196,8 @@ func solveWeighted(
 		previousPeak = current.Peak
 
 		reweight(weight, deviation)
+
+		performed = pass + 1
 	}
 
 	return bestTaps, bestError, performed, nil

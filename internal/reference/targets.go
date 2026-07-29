@@ -4,6 +4,7 @@ import (
 	"bufio"
 	_ "embed"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -259,7 +260,7 @@ func parseRoomResponse(input string) ([]roomPoint, error) {
 
 	for {
 		record, err := reader.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 

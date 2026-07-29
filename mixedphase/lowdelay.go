@@ -152,16 +152,16 @@ func newLowDelayProblem(
 
 	if cfg.InitialPenalty < 0 {
 		return nil, nil, fmt.Errorf(
-			"%w: initial penalty must not be negative, got %g",
-			ErrInvalidTolerance,
+			"%w: initial penalty is %g",
+			ErrInvalidPenalty,
 			cfg.InitialPenalty,
 		)
 	}
 
 	if cfg.PenaltyStages < 0 {
 		return nil, nil, fmt.Errorf(
-			"%w: penalty stages must not be negative, got %d",
-			ErrInvalidLength,
+			"%w: penalty stages is %d",
+			ErrInvalidIterations,
 			cfg.PenaltyStages,
 		)
 	}
@@ -202,9 +202,7 @@ func newLowDelayProblem(
 	}
 
 	if peak == 0 {
-		return nil, nil, fmt.Errorf(
-			"mixedphase: reference magnitude is identically zero",
-		)
+		return nil, nil, fmt.Errorf("%w: reference magnitude", ErrZeroResponse)
 	}
 
 	problem := &lowDelayProblem{

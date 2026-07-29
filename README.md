@@ -74,8 +74,13 @@ general mixed-phase methods. The separate graphic-EQ comparison remains scoped
 to its octave-band structure.
 
 ```bash
-just compare # Regenerate docs/reference-results.csv and docs/graphiceq-results.csv
+just compare       # Regenerate docs/reference-results.csv and docs/graphiceq-results.csv
+just compare-check # Prove those files are byte-reproducible
 ```
+
+The comparison artifacts carry no timings, so they are byte-identical on every run and
+every machine, and CI fails if regenerating them changes a single byte. Machine-local
+runtimes live separately in `docs/reference-timings.csv` (`just compare-timings`).
 
 `docs/graphiceq-results.csv` places each hybrid split next to an all-FIR design
 forced to the same tap count, which is the comparison that actually decides
@@ -105,8 +110,8 @@ try next rather than by API stability.
 
 ## Development
 
-Requirements: Go 1.25+, `just` (optional). Building the paper additionally requires
-Typst 0.15.0.
+Requirements: Go 1.25+ (the floor is set by `algo-dsp` and `algo-fft`), `just` (optional).
+Building the paper additionally requires Typst 0.15.0.
 
 ```bash
 just test       # Run all tests

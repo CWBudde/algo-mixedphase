@@ -3,6 +3,7 @@ package reference
 import (
 	"bytes"
 	"encoding/csv"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -196,7 +197,6 @@ func TestMarkdownTable(t *testing.T) {
 		"1.25000%",
 		"4.25",
 		"50.00%",
-		"0.00 ms",
 	}
 
 	for _, want := range wants {
@@ -204,11 +204,112 @@ func TestMarkdownTable(t *testing.T) {
 			t.Errorf("markdownTable() does not contain %q:\n%s", want, table)
 		}
 	}
+
+	// The table documents quality only. Runtime is set on the fixture above and
+	// must still not reach the rendered document, because that document is
+	// committed and has to stay reproducible.
+	if strings.Contains(table, "ms") {
+		t.Errorf("markdownTable() leaked a timing column:\n%s", table)
+	}
 }
 
 func TestRunRejectsNegativeTrials(t *testing.T) {
-	if _, err := Run(-1); err == nil {
-		t.Fatal("Run(-1) error = nil")
+	if _, err := Run(-1); !errors.Is(err, ErrInvalidTrials) {
+		t.Fatalf("Run(-1) error = %v, want %v", err, ErrInvalidTrials)
+	}
+}
+
+// TestUpdateMarkdownTableReplacesMarkedRegion covers the writer that rewrites
+// the committed method table in docs/MIXED_PHASE_FILTER_DESIGN.md. It edits a
+// tracked document in place, so the surrounding prose must survive untouched
+// and a document without markers must be refused rather than overwritten.
+func TestUpdateMarkdownTableReplacesMarkedRegion(t *testing.T) {
+	rows := []Row{{
+		Target:                 "parametric-eq",
+		Method:                 "budde-iterative",
+		RelativeMagnitudeError: 0.0125,
+		MeanGroupDelay:         4.25,
+		PrePeakEnergyRatio:     0.5,
+	}}
+
+	const (
+		before = "# Heading\n\nprose before\n\n"
+		after  = "\n\nprose after\n"
+	)
+
+	path := filepath.Join(t.TempDir(), "document.md")
+	original := before + tableStart + "\n\nstale table\n" + tableEnd + after
+
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	if err := UpdateMarkdownTable(path, rows); err != nil {
+		t.Fatalf("UpdateMarkdownTable() error = %v", err)
+	}
+
+	updated, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read updated document: %v", err)
+	}
+
+	got := string(updated)
+
+	if !strings.HasPrefix(got, before) || !strings.HasSuffix(got, after) {
+		t.Errorf("surrounding prose was not preserved:\n%s", got)
+	}
+
+	if strings.Contains(got, "stale table") {
+		t.Errorf("stale table survived the update:\n%s", got)
+	}
+
+	if !strings.Contains(got, "Budde iterative") {
+		t.Errorf("new table was not written:\n%s", got)
+	}
+
+	if strings.Count(got, tableStart) != 1 ||
+		strings.Count(got, tableEnd) != 1 {
+		t.Errorf("markers were duplicated:\n%s", got)
+	}
+}
+
+func TestUpdateMarkdownTableRejectsUnmarkedDocument(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{name: "no markers", content: "# Heading\n"},
+		{name: "missing end", content: tableStart + "\n"},
+		{name: "reversed order", content: tableEnd + "\n" + tableStart + "\n"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "document.md")
+			if err := os.WriteFile(path, []byte(test.content), 0o644); err != nil {
+				t.Fatalf("write fixture: %v", err)
+			}
+
+			if err := UpdateMarkdownTable(path, nil); err == nil {
+				t.Fatal("UpdateMarkdownTable() error = nil, want a refusal")
+			}
+
+			got, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read document: %v", err)
+			}
+
+			if string(got) != test.content {
+				t.Errorf("document was modified despite the error:\n%s", got)
+			}
+		})
+	}
+}
+
+func TestUpdateMarkdownTableReportsMissingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "absent.md")
+	if err := UpdateMarkdownTable(path, nil); err == nil {
+		t.Fatal("UpdateMarkdownTable() error = nil for a missing file")
 	}
 }
 
@@ -238,36 +339,12 @@ func assertCommittedQualityCSV(t *testing.T, rows []Row) {
 		t.Fatalf("read committed reference CSV: %v", err)
 	}
 
-	got := qualityCSV(t, generated.Bytes())
-
-	want := qualityCSV(t, committed)
-	if got != want {
+	// A plain byte comparison. The suite carries no timing any more, so there
+	// is nothing left to normalise away before comparing.
+	if !bytes.Equal(generated.Bytes(), committed) {
 		t.Fatal(
 			"committed quality results are stale; run `just compare` " +
 				"and review the metric changes",
 		)
 	}
-}
-
-func qualityCSV(t *testing.T, input []byte) string {
-	t.Helper()
-
-	records, err := csv.NewReader(bytes.NewReader(input)).ReadAll()
-	if err != nil {
-		t.Fatalf("parse reference CSV: %v", err)
-	}
-
-	for index := 1; index < len(records); index++ {
-		records[index][7] = "0"
-	}
-
-	var output bytes.Buffer
-
-	writer := csv.NewWriter(&output)
-
-	if err := writer.WriteAll(records); err != nil {
-		t.Fatalf("normalise reference CSV: %v", err)
-	}
-
-	return output.String()
 }

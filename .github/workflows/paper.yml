@@ -36,7 +36,7 @@ jobs:
           chmod +x /usr/local/bin/typstyle
 
       - name: Check paper formatting
-        run: typstyle --check docs/paper/paper.typ docs/paper/style.typ
+        run: typstyle --check docs/paper/paper.typ docs/paper/style.typ docs/paper/charts.typ
 
       - name: Build paper
         run: just paper

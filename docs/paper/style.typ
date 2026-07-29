@@ -4,79 +4,9 @@
 #let rule = rgb("#c9d1d7")
 #let draft-fill = rgb("#eef6f7")
 
-#let paper(
-  body,
-  title: "",
-  subtitle: "",
-  author: "",
-  revision: "",
-) = {
-  set document(
-    title: title,
-    author: author,
-    keywords: (
-      "mixed-phase FIR",
-      "minimum phase",
-      "group delay",
-      "filter design",
-      "reproducible research",
-    ),
-  )
-  set page(
-    paper: "a4",
-    margin: (x: 24mm, top: 21mm, bottom: 23mm),
-    numbering: "1",
-    number-align: center,
-  )
-  set text(
-    font: "Libertinus Serif",
-    size: 10pt,
-    fill: ink,
-    lang: "en",
-  )
-  set par(justify: true, leading: 0.65em)
-  set heading(numbering: "1.")
-  set math.equation(numbering: "(1)")
-  set table(
-    stroke: rule,
-    inset: (x: 5pt, y: 4pt),
-  )
-  show heading.where(level: 1): it => {
-    v(0.8em)
-    text(size: 13pt, weight: "bold", fill: accent, it)
-  }
-  show heading.where(level: 2): it => {
-    v(0.45em)
-    text(size: 11pt, weight: "bold", it)
-  }
-  show link: it => text(fill: accent, it)
-  show raw.where(block: false): it => box(
-    fill: rgb("#f1f3f5"),
-    inset: (x: 2pt, y: 1pt),
-    radius: 1.5pt,
-    it,
-  )
-
-  align(center)[
-    #text(size: 18pt, weight: "bold", title)
-    #v(0.3em)
-    #text(size: 11pt, fill: muted, subtitle)
-    #v(1em)
-    #text(weight: "bold", author)
-    #linebreak()
-    #text(size: 8.5pt, fill: muted)[Repository revision: #revision]
-  ]
-
-  v(0.8em)
-  line(length: 100%, stroke: 0.8pt + accent)
-  v(0.8em)
-
-  body
-}
-
 #let abstract(body) = block(
   inset: (x: 10pt, y: 8pt),
-  stroke: (left: 2pt + accent),
+  stroke: (left: 1.2pt + ink),
   fill: rgb("#f7f9fa"),
 )[
   #strong[Abstract.] #body
@@ -92,4 +22,101 @@
   #strong[Working-paper status.] #body
 ]
 
-#let code-path(path) = text(size: 8.3pt, raw(path))
+#let paper(
+  body,
+  title: "",
+  subtitle: "",
+  author: "",
+  revision: "",
+  abstract-body: none,
+  status-body: none,
+) = {
+  set document(
+    title: title,
+    author: author,
+    keywords: (
+      "mixed-phase FIR",
+      "minimum phase",
+      "group delay",
+      "filter design",
+      "reproducible research",
+    ),
+  )
+  set page(
+    paper: "a4",
+    margin: (x: 18mm, top: 17mm, bottom: 19mm),
+    numbering: "1",
+    number-align: center,
+  )
+  set text(
+    font: "Libertinus Serif",
+    size: 9.2pt,
+    fill: ink,
+    lang: "en",
+  )
+  set par(justify: true, leading: 0.56em)
+  set heading(numbering: "1.")
+  set math.equation(numbering: "(1)")
+  set table(
+    stroke: rule,
+    inset: (x: 5pt, y: 4pt),
+  )
+  show heading.where(level: 1): it => {
+    v(0.55em)
+    let label = if it.numbering == none {
+      upper(it.body)
+    } else {
+      [
+        #counter(heading).display(it.numbering) #upper(it.body)
+      ]
+    }
+    block[
+      #set par(justify: false)
+      #text(
+        font: "DejaVu Sans",
+        size: 10pt,
+        weight: "bold",
+        fill: ink,
+        label,
+      )
+    ]
+  }
+  show heading.where(level: 2): it => {
+    v(0.35em)
+    text(size: 10.2pt, weight: "bold", fill: ink, it)
+  }
+  show link: it => text(fill: ink, it)
+  show raw.where(block: false): it => box(
+    fill: rgb("#f1f3f5"),
+    inset: (x: 2pt, y: 1pt),
+    radius: 1.5pt,
+    it,
+  )
+
+  align(center)[
+    #text(size: 17pt, weight: "bold", title)
+    #v(0.3em)
+    #text(size: 10.5pt, fill: muted, subtitle)
+    #v(0.8em)
+    #text(weight: "bold", author)
+    #linebreak()
+    #text(size: 8pt, fill: muted)[Repository revision: #revision]
+  ]
+
+  v(0.65em)
+  line(length: 100%, stroke: 0.8pt + ink)
+  v(0.65em)
+
+  if abstract-body != none {
+    abstract(abstract-body)
+    v(0.55em)
+  }
+  if status-body != none {
+    draft-note(status-body)
+    v(0.7em)
+  }
+
+  columns(2, body, gutter: 5mm)
+}
+
+#let code-path(path) = text(size: 7.8pt, raw(path))
