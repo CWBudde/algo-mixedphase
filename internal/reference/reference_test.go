@@ -86,19 +86,48 @@ func TestRunCoversEveryMethodAndMetric(t *testing.T) {
 		t.Fatalf("Targets() error = %v", err)
 	}
 
-	const methodCount = 5
+	// Taken from the harness rather than restated, so adding a method cannot
+	// leave this test asserting a stale count.
+	methodCount := len(methods())
 
 	wantRows := len(targets) * methodCount
 	if len(rows) != wantRows {
 		t.Fatalf("len(Run()) = %d, want %d", len(rows), wantRows)
 	}
 
+	// budde-adaptive selects its own budget, so it is the one method whose
+	// reported delay is not the suite constant. Everything else must be.
+	choosesDelay := map[string]bool{}
+	for _, method := range methods() {
+		choosesDelay[method.name] = method.choosesDelay
+	}
+
 	for _, row := range rows {
 		if row.SampleRate != SampleRate ||
 			row.Taps != TapCount ||
-			row.FFTSize != FFTSize ||
-			row.DelayBudget != DelayBudget {
+			row.FFTSize != FFTSize {
 			t.Errorf("%s/%s has inconsistent budget: %+v", row.Target, row.Method, row)
+		}
+
+		switch {
+		case choosesDelay[row.Method]:
+			if row.DelayBudget < 0 || row.DelayBudget > (TapCount-1)/2 {
+				t.Errorf(
+					"%s/%s selected delay %d outside [0, %d]",
+					row.Target,
+					row.Method,
+					row.DelayBudget,
+					(TapCount-1)/2,
+				)
+			}
+		case row.DelayBudget != DelayBudget:
+			t.Errorf(
+				"%s/%s reported delay %d, want the suite budget %d",
+				row.Target,
+				row.Method,
+				row.DelayBudget,
+				DelayBudget,
+			)
 		}
 
 		if row.Runtime != 0 {
@@ -230,7 +259,7 @@ func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
 		t.Fatalf("RepresentativeResponses() error = %v", err)
 	}
 
-	const methodCount = 5
+	methodCount := len(methods())
 
 	wantFrequencyRows := len(ResponseTargets()) * methodCount * (FFTSize/2 + 1)
 	if len(frequencyRows) != wantFrequencyRows {

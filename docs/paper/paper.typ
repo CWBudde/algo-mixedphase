@@ -24,13 +24,20 @@
     revisits an alternating factorisation proposed at DAGA 2012 that combines
     minimum- and linear-phase factors. It distinguishes that historical
     construction from the exact support convention, numerical safeguards,
-    stopping rule, comparison methods, and evaluation protocol introduced by
-    the present revision. The later comparison covers phase interpolation,
-    weighted complex approximation, direct low-group-delay optimisation, and a
-    structure-specific hybrid graphic equaliser. All implementations and
-    measurements are maintained in a public Go repository so that each
-    quantitative claim can be traced to a test or a committed comparison
-    artifact.
+    stopping rule, delay-selection rule, comparison methods, and evaluation
+    protocol introduced by the present revision. The later comparison covers
+    phase interpolation, weighted complex approximation, minimum-phase
+    truncation, direct low-group-delay optimisation, and a structure-specific
+    hybrid graphic equaliser. The benchmark's principal finding is that the
+    construction's delay budget, an input in 2012, is what limits it: held fixed
+    it leads no metric on any reference target, because on targets whose
+    minimum-phase factor fits the allocated support the design reduces to a
+    delayed minimum-phase filter. Selecting the budget against a stated
+    objective instead makes it lead realised RMS dB magnitude error on every
+    target while declining the budget wherever it would be wasted. All
+    implementations and measurements are maintained in a public Go repository so
+    that each quantitative claim can be traced to a test or a committed
+    comparison artifact.
   ],
   status-body: [
     This is a reviewed English author manuscript. The boundary between the 2012
@@ -86,15 +93,19 @@ not a proved optimum or a claim supported by a benchmark.
 
 This revision adds the exact output-support convention, regularised spectral
 division, concrete minimum-phase reconstructions and windows, a reproducible
-stopping policy, common metrics, competing methods, and deterministic benchmark
-artifacts. Those additions must not be read back as results of the 2012 paper.
-The revised treatment:
+stopping policy, common metrics, competing methods, deterministic benchmark
+artifacts, and a rule for choosing the delay budget. Those additions must not be
+read back as results of the 2012 paper. In particular, the delay budget is an
+_input_ to the 2012 construction; treating it as an output, as
+@delay-selection does, is work of this revision and is what the benchmark
+below shows the construction needs. The revised treatment:
 
 - states the alternating factorisation with an exact total-support budget;
 - compares designs under identical targets, weights, tap counts, and delay
   constraints;
 - measures the realised impulse response rather than only a design grid;
-- exposes cases where each method is unreliable; and
+- exposes cases where each method is unreliable;
+- derives the delay budget from the target instead of accepting it; and
 - maps every reported number and figure to source code and a regeneration
   command.
 
@@ -296,6 +307,48 @@ experiments that require an exact pass count. The reproducibility appendix
 reports the configured pass budget, while every alternating-design CSV row
 records the number of accepted passes.
 
+=== Selecting the delay budget <delay-selection>
+
+In the 2012 construction the delay $d$ is given. @failure-mode-table and
+@cross-target-summary show that this is the construction's principal practical
+weakness rather than a detail of its interface, and that it fails in both
+directions. Too large a budget on a target whose minimum-phase factor already
+fits $N - 2 d$ taps buys nothing: the design degenerates as described in
+@evaluation-protocol and pays $d$ samples of latency for a delayed
+minimum-phase filter. Too small a non-zero budget is worse still. On the steep-crossover
+fixture a budget of one sample raises the relative magnitude error to 77.5%,
+against 1.227% at $d = 0$ and 2.639% at the budget selected below, because a
+three-tap linear factor cannot approximate the residual quotient at all. The
+error is therefore neither monotone nor unimodal in $d$, and no fixed default
+is defensible across targets.
+
+This revision therefore treats $d$ as an output. The rule is stated as a
+constrained selection over the same construction:
+
+$
+  d^* = arg min_(d in D) E_"dB" (d) \
+  "subject to" quad E_"rel" (d) <= (1 + sigma) E_"rel" (0),
+$ <delay-objective>
+
+where $E_"dB"$ is the realised RMS dB magnitude error, $E_"rel"$ the relative
+linear-magnitude error, $sigma$ a caller-stated slack, and $D$ a set of
+candidate budgets that always contains zero. The dB error is the objective
+because it is the measure sensitive to stopband depth, which @contrast-magnitude
+shows is what the factorisation actually buys; the relative error is the
+constraint because it is dominated by the passband, which is what a deeper
+stopband can otherwise be paid for with. Because $d = 0$ is always a candidate
+and always satisfies the constraint, the selected design is never worse than
+minimum-phase truncation in $E_"dB"$.
+
+Two properties of this rule should be stated plainly. It does not promise a
+better design on every axis: the selected budget may carry more group delay and
+a larger $E_"rel"$, bounded by $sigma$, and on the steep-crossover fixture it
+accepts both. And $D$ is a strided scan with local refinement rather than every
+admissible budget, so the selection is a heuristic; it is exact only when $D$ is
+exhaustive, and the repository's tests record one fixture where the strided scan
+is 0.76 dB short of the exhaustive result. The implementation uses $sigma = 2$
+and a stride of four, which the reproducibility appendix records.
+
 = Post-2012 comparison methods
 
 None of the methods in this section was evaluated in the 2012 contribution.
@@ -391,7 +444,9 @@ remain legible when printed in greyscale.
   caption: [
     Magnitude-accuracy versus mean-delay trade-off over all six reference
     targets at 48 kHz. Each point is a realised 129-tap design on the common
-    1024-point grid; the phase-controlled methods use a 16-sample budget. The
+    1024-point grid; the three fixed-budget phase-controlled methods use a
+    16-sample budget, minimum-phase truncation none, and the selected-delay
+    method chooses its own per target. The
     error axis is logarithmic. Shape and colour identify the method; complete
     optimiser budgets are recorded in the reproducibility appendix.
   ],
@@ -400,14 +455,25 @@ remain legible when printed in greyscale.
 The phase-free designs occupy the low-delay side of @accuracy-delay by allowing
 substantially more magnitude error. The plot separates into two regimes, and
 they must be read separately. On the five smooth targets, which cluster below
-25 samples, the alternating method occupies the high-accuracy region but at a
-greater mean delay than direct phase interpolation — the delay is spent without
-being earned, for the reason given in @evaluation-protocol. The
-steep-crossover cluster near 50 samples inverts that relation: there the
+25 samples, the fixed-budget alternating design occupies the high-accuracy
+region but at a greater mean delay than direct phase interpolation — the delay
+is spent without being earned, for the reason given in @evaluation-protocol.
+The steep-crossover cluster near 50 samples inverts that relation: there the
 alternating design attains both a lower mean delay than phase interpolation and
 a far lower dB error, which is the behaviour the construction is meant to
-produce. Note that the relative-error axis, being a linear-magnitude norm,
-understates that gap; @cross-target-summary and @contrast-magnitude give the dB
+produce.
+
+The selected-delay variant of @delay-selection resolves the two regimes into
+one. On the five smooth targets it chooses $d = 0$ and its marker therefore
+coincides with minimum-phase truncation, at 0.5 to 10.4 samples of mean delay
+instead of the 16.5 to 26.4 the fixed budget pays; on steep-crossover it chooses
+$d = 22$ and moves further into the accurate region than the fixed budget
+reaches. Where the two alternating markers coincide the cross is drawn over the
+inverted triangle, which is the visible signature of a declined budget.
+
+Note that the relative-error axis, being a linear-magnitude norm, understates
+the steep-crossover gap and is the one axis on which the selected budget is
+worse than $d = 0$; @cross-target-summary and @contrast-magnitude give the dB
 view. This plot is descriptive rather than a universal ranking: targets differ
 in difficulty, and the methods do not optimise the same norm.
 
@@ -452,7 +518,8 @@ proof that metrics with different objectives are interchangeable.
   ],
 ) <cross-target-summary>
 
-The alternating construction has the lowest relative magnitude error on
+The fixed-budget alternating construction has the lowest relative magnitude
+error on
 #cross-target-win-count(
   reference-results,
   "budde-iterative",
@@ -462,7 +529,36 @@ The alternating construction has the lowest relative magnitude error on
   reference-results,
   "budde-iterative",
   "rms_magnitude_error_db",
-) of six. The low-group-delay optimiser records the lowest mean delay on
+) of six — it wins no column on any target, which is the clearest statement of
+the problem @delay-selection addresses. Selecting the budget instead changes
+that outcome completely: the selected-delay variant has the lowest RMS magnitude
+error on
+#cross-target-win-count(
+  reference-results,
+  "budde-adaptive",
+  "rms_magnitude_error_db",
+) of six targets, the only method to lead a column on every target, and the
+lowest relative magnitude error on
+#cross-target-win-count(
+  reference-results,
+  "budde-adaptive",
+  "relative_magnitude_error",
+) of six. It gives up the relative-error lead only on steep-crossover, where
+@delay-objective spends the slack it is allowed. Minimum-phase truncation leads
+relative error on
+#cross-target-win-count(
+  reference-results,
+  "minphase-truncation",
+  "relative_magnitude_error",
+) of six and RMS error on
+#cross-target-win-count(
+  reference-results,
+  "minphase-truncation",
+  "rms_magnitude_error_db",
+) of six; the selected-delay variant reproduces it exactly wherever it declines
+a budget, so those columns are shared by construction rather than contested.
+
+The low-group-delay optimiser records the lowest mean delay on
 #cross-target-win-count(
   reference-results,
   "low-group-delay",
@@ -484,11 +580,21 @@ delay need not minimise ringing before the largest coefficient.
 Complex minimax has no aggregate win in these magnitude-only columns. That is
 not a failure of its stated objective: Lawson reweighting controls peak complex
 error, and in the deep-notch case it improves both RMS and maximum dB error over
-direct phase interpolation. These cross-target results therefore support a
-conditional selection rule: use alternating correction when fixed-support
-magnitude fidelity is primary, direct low-delay optimisation when delay and
-coefficient range justify a magnitude tolerance, and complex weighting when
-the complex-response norm or band priorities are the actual specification.
+direct phase interpolation.
+
+These cross-target results support a conditional selection rule. Use the
+alternating construction with a selected budget when fixed-support magnitude
+fidelity in the dB sense is primary; it is never worse than minimum-phase
+truncation on that measure and is decisively better when the target starves the
+minimum-phase factor. Use minimum-phase truncation when a linear-magnitude norm
+is the specification and latency is critical, since it leads that column and
+carries the least delay of the magnitude-faithful designs. Use direct low-delay
+optimisation when delay and coefficient range justify an explicit magnitude
+tolerance, and complex weighting when the complex-response norm or band
+priorities are the actual specification. The fixed-budget alternating design is
+not recommended for new work: every target on which it would be chosen is one
+where @delay-objective selects a different budget, and it is retained here as
+the 2012 reference point and as the evidence for that conclusion.
 
 == Representative realised responses
 
@@ -635,10 +741,12 @@ complex minimax and the delay-zero baseline all depart from it well above
 for minimum-phase truncation, 42.84 dB for the low-group-delay optimiser and
 72.23 dB for complex minimax — at a mean group delay of 49.61 samples, which is
 _lower_ than phase interpolation's 53.04. The method wins on accuracy and delay
-at once here, which it does on none of the five smooth targets.
+at once here, which it does on none of the five smooth targets. Selecting the
+budget by @delay-objective improves this further, to 3.31 dB at $d = 22$, and is
+the trace drawn for the selected-delay method in the same figure.
 
 The corresponding group-delay plot is omitted: this target's weight is confined
-to the band below 516 Hz, where all five designs lie between 42.9 and 59.1
+to the band below 516 Hz, where all six designs lie between 42.9 and 59.1
 samples and the curves are not separable at a legible scale. The scalar
 group-delay ripple for every method is in @cross-target-summary and the
 committed CSV.
@@ -745,6 +853,22 @@ corresponding row.
         Compare against the same design at $d=0$, or measure the linear
         factor's energy away from its centre tap, as
         #code-path("TestSteepTargetActuallyExercisesTheFactorisation") does.
+        Selecting the budget by @delay-objective removes the mode rather than
+        only reporting it, because $d = 0$ then wins whenever it would occur.
+      ],
+
+      [Hand-picked delay budget],
+      [
+        A small non-zero budget is worse than both endpoints: on
+        steep-crossover $d = 1$ reaches 77.5% relative magnitude error against
+        1.227% at $d = 0$. The error is neither monotone nor unimodal in $d$.
+      ],
+      [
+        Do not default the budget. Select it against a stated objective, as
+        @delay-objective does and
+        #code-path("TestSmallDelayBudgetsAreTheWorstChoice") pins. A selection
+        over a strided candidate set is a heuristic; report the stride, and use
+        an exhaustive set when the budget must be optimal.
       ],
 
       [Low-delay optimisation],
@@ -825,6 +949,25 @@ revision shown on the title page.
     $epsilon=10^(-12)$ of the target peak, and default
     $tau=10^(-7)$ dB. The CSV records accepted $P$. _Reproduce:_
     `go test ./mixedphase`; `just test-cross-build`.
+
+  - *Delay selection, @delay-selection.* _Implementation:_
+    #code-path("mixedphase.DesignIterativeAuto") in
+    #code-path("mixedphase/autoiterative.go"), published in the comparison as
+    the #code-path("budde-adaptive") method. _Evidence:_
+    #code-path("TestDesignIterativeAutoSelectsZeroWhenDelayBuysNothing") and
+    #code-path("TestDesignIterativeAutoNeverLosesToMinimumPhase") pin the
+    guarantee, #code-path("TestDesignIterativeAutoExhaustiveSearchIsNeverWorse")
+    records that the strided candidate set is a heuristic,
+    #code-path("TestAdaptiveDelaySelectionBeatsTheFixedBudget") pins the six
+    selected budgets and the 3.310 dB figure,
+    #code-path("TestAdaptiveSelectionBuysStopbandDepthForLatency") the 70.8 dB
+    and 2.63-sample trade, and
+    #code-path("TestSmallDelayBudgetsAreTheWorstChoice") the 77.5% figure quoted
+    for $d = 1$. _Reference budget:_ $N=129$, $K=1024$, $P_"max"=12$ per
+    candidate, slack $sigma=2$, candidate stride 4, $d$ searched over
+    $[0, 64]$. The CSV records the selected $d$ in
+    #code-path("phase_delay_samples"). _Reproduce:_ `go test ./mixedphase`;
+    `just compare-check`.
 
   - *Minimum-phase reconstruction, @minimum-reconstruction.*
     _Implementation:_ #code-path("mixedphase.MinimumPhaseWith") and the method
@@ -980,7 +1123,12 @@ committed CSV fields directly.
 
 The comparison is limited to six fixed targets, one 129-tap output budget,
 and the stated optimiser budgets; it does not establish asymptotic convergence
-or perceptual preference. The original signal-flow figures are redrawn only as
+or perceptual preference. The delay selection of @delay-selection is evaluated
+under one slack and one candidate stride, and its candidate set is not
+exhaustive; the choice of RMS dB error as its objective is an engineering
+judgement about which error a fixed-support design should protect, not a result.
+Only one of the six targets starves the minimum-phase factor, so the advantage
+that selection produces rests on a single fixture of that class. The original signal-flow figures are redrawn only as
 a qualitative structural diagram; their response example has not been
 reconstructed because no machine-readable source data were published.
 Perceptual evaluation is limited to objective pre-ringing and delay proxies;
@@ -992,16 +1140,35 @@ The 2012 contribution is the alternating minimum/linear-phase factorisation:
 two short FIR factors repeatedly compensate each other's windowing error so a
 pre-ringing budget can be spent without defaulting to a full linear-phase
 support. The exact support equation, regularisation, stop-before-rise policy,
-comparison methods, failure analysis, and benchmark evidence belong to this
-revision.
+delay selection, comparison methods, failure analysis, and benchmark evidence
+belong to this revision.
+
+The benchmark's principal finding concerns the budget rather than the
+factorisation. With the delay budget fixed at 16 samples the construction leads
+no metric on any of the six targets: on the five whose minimum-phase factor fits
+the allocated support it is a delayed minimum-phase filter, which the same code
+produces at $d = 0$ with 10 to 16 fewer samples of latency and no more error.
+That is a property of the fixed budget, not of the factorisation, and it is
+correctable. Treating the budget as an output of a stated objective —
+@delay-objective — makes the construction lead realised RMS dB magnitude error
+on all six targets, the only method here to lead a column outright, while
+declining the budget entirely wherever it would be wasted. On the one target
+that starves the minimum-phase factor, selection reaches 3.310 dB against
+6.901 dB for the fixed budget and 42.838 dB for the best competing method, at
+2.63 samples more mean group delay than minimum-phase truncation and 71 dB more
+stopband rejection. What the factorisation buys is stopband depth at fixed
+support, and it is worth buying only when the target's minimum-phase response
+does not fit the taps the split leaves it — a condition that can be tested
+before designing.
 
 More broadly, mixed-phase FIR design is not one optimisation problem but a
 family of choices about which phase information to preserve, which error to
 minimise, and how to spend finite support. This revision makes those choices
-and their provenance explicit and binds its new evidence to executable
-designs. Across the fixed reference suite, alternating correction is the
-consistent relative-magnitude choice, while the phase-free optimiser is the
-consistent mean-delay choice; neither conclusion extends beyond the stated
-targets, weights, and budgets.
+and their provenance explicit and binds its new evidence to executable designs.
+Across the fixed reference suite, alternating correction with a selected budget
+is the consistent dB-accuracy choice, minimum-phase truncation the consistent
+linear-magnitude choice, and the phase-free optimiser the consistent mean-delay
+choice; none of these conclusions extends beyond the stated targets, weights,
+and budgets.
 
 #bibliography("references.bib", style: "ieee", title: "References")

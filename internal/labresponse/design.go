@@ -37,6 +37,12 @@ type Request struct {
 type Result struct {
 	Result mixedphase.Result
 
+	// UsedDelay is the linear-phase delay the design actually applied, in
+	// samples, or unprescribedDelay for a design that prescribes none. For the
+	// adaptive method it is the budget the search selected, which is the number
+	// a visitor cannot otherwise see.
+	UsedDelay int
+
 	// Realised is evaluated from the returned taps, not from the design grid,
 	// so the page shows the filter that would actually run.
 	Realised Response
@@ -113,8 +119,12 @@ func TargetNames() ([]string, error) {
 // MethodNames lists every method name Design accepts, in the order the page
 // offers them.
 func MethodNames() []string {
-	return []string{"iterative", "interpolation", "minimax", "lowdelay"}
+	return []string{"iterative", "adaptive", "interpolation", "minimax", "lowdelay"}
 }
+
+// unprescribedDelay marks a design that does not take a delay budget, so the
+// page shows no figure rather than a misleading zero.
+const unprescribedDelay = -1
 
 // fixtureFor resolves a request's target to its prototype and weights.
 func fixtureFor(request Request) (targetFixture, error) {
@@ -185,7 +195,22 @@ func Design(request Request) (Result, error) {
 
 	var result mixedphase.Result
 
+	usedDelay := delay
+
 	switch request.Method {
+	case "adaptive":
+		result, err = mixedphase.DesignIterativeAuto(
+			fixture.prototype,
+			mixedphase.AutoIterativeConfig{
+				Length:     length,
+				Iterations: request.Iterations,
+				FFTSize:    fixture.fftSize,
+			},
+		)
+		// The search ignores the requested budget entirely; reporting the
+		// slider's value here would hide the one output that distinguishes this
+		// method from the fixed-budget one.
+		usedDelay = result.Delay
 	case "iterative":
 		result, err = mixedphase.DesignIterative(
 			fixture.prototype,
@@ -222,6 +247,7 @@ func Design(request Request) (Result, error) {
 			},
 		)
 	case "lowdelay":
+		usedDelay = unprescribedDelay
 		result, err = mixedphase.DesignLowGroupDelay(
 			fixture.prototype,
 			// FFTSize is left at its default for the low-pass so that the grid
@@ -252,6 +278,7 @@ func Design(request Request) (Result, error) {
 
 	return Result{
 		Result:    result,
+		UsedDelay: usedDelay,
 		Realised:  New(result.Taps),
 		Prototype: New(fixture.prototype),
 	}, nil

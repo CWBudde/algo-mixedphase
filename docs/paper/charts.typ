@@ -14,6 +14,7 @@
   "#4c5560",
   "#3f7a3f",
   "#944d73",
+  "#1f4e79",
 )
 
 #let number(value, digits: 2) = str(calc.round(value, digits: digits))
@@ -45,8 +46,10 @@
   2
 } else if method == "minphase-truncation" {
   3
-} else {
+} else if method == "low-group-delay" {
   4
+} else {
+  5
 }
 
 #let method-label(method) = if method == "budde-iterative" {
@@ -57,8 +60,10 @@
   "Complex minimax"
 } else if method == "minphase-truncation" {
   "Minimum-phase truncation"
-} else {
+} else if method == "low-group-delay" {
   "Low group delay"
+} else {
+  "Alternating, selected delay"
 }
 
 #let reference-targets = (
@@ -88,8 +93,10 @@
   "3 6"
 } else if method == "minphase-truncation" {
   "2 4"
-} else {
+} else if method == "low-group-delay" {
   "13 5 3 5"
+} else {
+  "7 4 2 4"
 }
 
 #let svg-text(
@@ -249,7 +256,7 @@
     )
       .map(str)
       .join("")
-  } else {
+  } else if index == 4 {
     (
       "<polygon points=\"",
       number(x),
@@ -267,6 +274,68 @@
       number(x + size + 1),
       ",",
       number(y),
+      "\" fill=\"",
+      color,
+      "\" stroke=\"",
+      ink,
+      "\" stroke-width=\"1.5\"/>",
+    )
+      .map(str)
+      .join("")
+  } else {
+    // Cross. The sixth method needs a sixth outline, because the paper's claim
+    // that the figures survive greyscale printing holds only while every method
+    // is identifiable by shape alone.
+    let arm = size / 3
+    (
+      "<polygon points=\"",
+      number(x - arm),
+      ",",
+      number(y - size),
+      " ",
+      number(x + arm),
+      ",",
+      number(y - size),
+      " ",
+      number(x + arm),
+      ",",
+      number(y - arm),
+      " ",
+      number(x + size),
+      ",",
+      number(y - arm),
+      " ",
+      number(x + size),
+      ",",
+      number(y + arm),
+      " ",
+      number(x + arm),
+      ",",
+      number(y + arm),
+      " ",
+      number(x + arm),
+      ",",
+      number(y + size),
+      " ",
+      number(x - arm),
+      ",",
+      number(y + size),
+      " ",
+      number(x - arm),
+      ",",
+      number(y + arm),
+      " ",
+      number(x - size),
+      ",",
+      number(y + arm),
+      " ",
+      number(x - size),
+      ",",
+      number(y - arm),
+      " ",
+      number(x - arm),
+      ",",
+      number(y - arm),
       "\" fill=\"",
       color,
       "\" stroke=\"",
@@ -383,10 +452,13 @@
   image(bytes(svg), format: "svg", width: 100%)
 }
 
-#let chart-image(body, definitions: "") = {
+// height overrides the canvas for charts whose legend needs more rows than the
+// default leaves room for. The plot area itself is fixed by plot-top and
+// plot-bottom, so a taller canvas only adds space below the axis label.
+#let chart-image(body, definitions: "", height: chart-height) = {
   svg-image(
     chart-width,
-    chart-height,
+    height,
     body,
     definitions: definitions,
   )
@@ -569,11 +641,12 @@
     .join("")
 }
 
-// Five methods wrap onto three rows of two, so the block starts higher than it
-// did at four to keep the last row's descenders inside the canvas.
+// Six methods fill three rows of two exactly. The block starts high enough to
+// keep the last row's descenders inside the canvas.
 #let method-legend(y: 396) = {
   let methods = (
     "budde-iterative",
+    "budde-adaptive",
     "phase-interpolation",
     "complex-minimax",
     "minphase-truncation",
@@ -602,11 +675,14 @@
     .join("")
 }
 
+// Four rows of two now, since six methods plus an optional target entry no
+// longer fit in three. The callers pass a taller canvas to match.
 #let response-legend(include-target: false, y: 401) = {
   let entries = if include-target {
     (
       ("target", "Target"),
       ("budde-iterative", method-label("budde-iterative")),
+      ("budde-adaptive", method-label("budde-adaptive")),
       ("phase-interpolation", method-label("phase-interpolation")),
       ("complex-minimax", method-label("complex-minimax")),
       ("minphase-truncation", method-label("minphase-truncation")),
@@ -615,6 +691,7 @@
   } else {
     (
       ("budde-iterative", method-label("budde-iterative")),
+      ("budde-adaptive", method-label("budde-adaptive")),
       ("phase-interpolation", method-label("phase-interpolation")),
       ("complex-minimax", method-label("complex-minimax")),
       ("minphase-truncation", method-label("minphase-truncation")),
@@ -662,7 +739,12 @@
   // designs sit near 50 samples, so a 30-sample axis would drop them outside
   // the plot frame entirely.
   let x-pos(value) = x-linear(value, 0, 60)
-  let y-pos(value) = y-log(value, 0.00001, 100)
+  // Ten decades, and clamped. The minimum-phase designs on the two crossovers
+  // reach 1.6e-8%, three decades below the old floor, and this chart draws no
+  // clip path: an unclamped point does not vanish, it renders below the frame.
+  let y-min = 0.00000001
+  let y-max = 100
+  let y-pos(value) = y-log(calc.clamp(value, y-min, y-max), y-min, y-max)
   let points = rows
     .map(row => {
       let delay = float(row.at("mean_group_delay"))
@@ -673,10 +755,11 @@
   let chart-axes = axes(
     ((0, "0"), (15, "15"), (30, "30"), (45, "45"), (60, "60")),
     (
-      (0.00001, "0.00001"),
-      (0.001, "0.001"),
-      (0.1, "0.1"),
-      (10, "10"),
+      (0.00000001, "1e-8"),
+      (0.000001, "1e-6"),
+      (0.0001, "1e-4"),
+      (0.01, "0.01"),
+      (1, "1"),
       (100, "100"),
     ),
     x-pos,
@@ -698,6 +781,7 @@
   )
   let methods = (
     "budde-iterative",
+    "budde-adaptive",
     "phase-interpolation",
     "complex-minimax",
     "minphase-truncation",
@@ -707,7 +791,12 @@
   // top rule.
   let y-pos(value) = y-linear(value, 0, 55)
   let group-width = (plot-right - plot-left) / 6
-  let bar-width = 14
+  // Six bars per group have to fit inside the 97-point group width: at the old
+  // 14-point bar the sixth would have started past the group boundary and
+  // overlapped the next target.
+  let bar-width = 11
+  let bar-gap = 2
+  let group-inset = 10
   let bars = targets
     .enumerate()
     .map(target-pair => {
@@ -716,7 +805,7 @@
       methods
         .enumerate()
         .map(method-pair => {
-          let method-index = method-pair.at(0)
+          let slot = method-pair.at(0)
           let method = method-pair.at(1)
           let row = rows.find(row => (
             row.at("target") == target and row.at("method") == method
@@ -725,8 +814,8 @@
           let x = (
             plot-left
               + target-index * group-width
-              + 15
-              + method-index * (bar-width + 3)
+              + group-inset
+              + slot * (bar-width + bar-gap)
           )
           let y = y-pos(value)
           (
@@ -739,7 +828,7 @@
             "\" height=\"",
             number(plot-bottom - y),
             "\" fill=\"url(#pattern",
-            str(method-index),
+            str(method-index(method)),
             ")\" stroke=\"",
             ink,
             "\" stroke-width=\"1\"/>",
@@ -787,6 +876,10 @@
     <pattern id=\"pattern4\" width=\"8\" height=\"8\" patternUnits=\"userSpaceOnUse\">
       <rect width=\"8\" height=\"8\" fill=\"#ead5e1\"/>
       <path d=\"M0,0 L8,8 M8,0 L0,8\" stroke=\"#65334f\" stroke-width=\"1.4\"/>
+    </pattern>
+    <pattern id=\"pattern5\" width=\"8\" height=\"8\" patternUnits=\"userSpaceOnUse\">
+      <rect width=\"8\" height=\"8\" fill=\"#cfdcea\"/>
+      <path d=\"M4,0 L4,8\" stroke=\"#1f4e79\" stroke-width=\"1.6\"/>
     </pattern>"
   chart-image(
     (chart-axes, bars, method-legend()).map(str).join(""),
@@ -896,6 +989,7 @@
   )
   let methods = (
     "budde-iterative",
+    "budde-adaptive",
     "phase-interpolation",
     "complex-minimax",
     "minphase-truncation",
@@ -912,6 +1006,7 @@
     ))
     .join("")
   chart-image(
+    height: chart-height + 30,
     (chart-axes, lines, target-line, response-legend(include-target: true))
       .map(str)
       .join(""),
@@ -949,6 +1044,7 @@
   )
   let methods = (
     "budde-iterative",
+    "budde-adaptive",
     "phase-interpolation",
     "complex-minimax",
     "minphase-truncation",
@@ -965,6 +1061,7 @@
     ))
     .join("")
   chart-image(
+    height: chart-height + 30,
     (chart-axes, lines, response-legend()).map(str).join(""),
   )
 }
@@ -989,6 +1086,7 @@
   )
   let methods = (
     "budde-iterative",
+    "budde-adaptive",
     "phase-interpolation",
     "complex-minimax",
     "minphase-truncation",
@@ -1004,6 +1102,7 @@
     ))
     .join("")
   chart-image(
+    height: chart-height + 30,
     (chart-axes, lines, response-legend()).map(str).join(""),
   )
 }
@@ -1030,59 +1129,45 @@
   )
 }
 
+// The summary table is transposed relative to the 2012 layout: methods run down
+// the rows and criteria across the columns. Six methods will not fit as six
+// columns inside one text column, and the criterion names abbreviate far better
+// than the method names do.
+#let summary-methods = (
+  ("budde-iterative", [Alternating, $d = 16$]),
+  ("budde-adaptive", [Alternating, selected $d$]),
+  ("phase-interpolation", [Phase interpolation]),
+  ("complex-minimax", [Complex minimax]),
+  ("minphase-truncation", [Minimum-phase truncation]),
+  ("low-group-delay", [Low group delay]),
+)
+
+#let summary-criteria = (
+  ([Rel. error], "relative_magnitude_error"),
+  ([RMS dB], "rms_magnitude_error_db"),
+  ([Mean delay], "mean_group_delay"),
+  ([Pre-peak], "pre_peak_energy_ratio"),
+  ([Coef. range], "coefficient_range_db"),
+  ([Ripple], "group_delay_ripple"),
+)
+
 #let cross-target-summary-table(rows) = {
   let win(method, key) = cross-target-win-count(rows, method, key)
+  let numeric = range(summary-criteria.len())
   table(
-    columns: (1.2fr, 0.46fr, 0.46fr, 0.46fr, 0.46fr, 0.46fr),
-    align: (left, center, center, center, center, center),
+    columns: (1.45fr,) + numeric.map(_ => 0.52fr),
+    align: (left,) + numeric.map(_ => center),
     table.header(
-      [Criterion],
-      [Alternating],
-      [Phase interpolation],
-      [Complex minimax],
-      [Min-phase truncation],
-      [Low group delay],
+      [Method],
+      ..summary-criteria.map(criterion => criterion.at(0)),
     ),
-    [Lowest relative magnitude error],
-    [#win("budde-iterative", "relative_magnitude_error")],
-    [#win("phase-interpolation", "relative_magnitude_error")],
-    [#win("complex-minimax", "relative_magnitude_error")],
-    [#win("minphase-truncation", "relative_magnitude_error")],
-    [#win("low-group-delay", "relative_magnitude_error")],
-
-    [Lowest RMS magnitude error],
-    [#win("budde-iterative", "rms_magnitude_error_db")],
-    [#win("phase-interpolation", "rms_magnitude_error_db")],
-    [#win("complex-minimax", "rms_magnitude_error_db")],
-    [#win("minphase-truncation", "rms_magnitude_error_db")],
-    [#win("low-group-delay", "rms_magnitude_error_db")],
-
-    [Lowest mean group delay],
-    [#win("budde-iterative", "mean_group_delay")],
-    [#win("phase-interpolation", "mean_group_delay")],
-    [#win("complex-minimax", "mean_group_delay")],
-    [#win("minphase-truncation", "mean_group_delay")],
-    [#win("low-group-delay", "mean_group_delay")],
-
-    [Least pre-peak energy],
-    [#win("budde-iterative", "pre_peak_energy_ratio")],
-    [#win("phase-interpolation", "pre_peak_energy_ratio")],
-    [#win("complex-minimax", "pre_peak_energy_ratio")],
-    [#win("minphase-truncation", "pre_peak_energy_ratio")],
-    [#win("low-group-delay", "pre_peak_energy_ratio")],
-
-    [Smallest coefficient range],
-    [#win("budde-iterative", "coefficient_range_db")],
-    [#win("phase-interpolation", "coefficient_range_db")],
-    [#win("complex-minimax", "coefficient_range_db")],
-    [#win("minphase-truncation", "coefficient_range_db")],
-    [#win("low-group-delay", "coefficient_range_db")],
-
-    [Least group-delay ripple],
-    [#win("budde-iterative", "group_delay_ripple")],
-    [#win("phase-interpolation", "group_delay_ripple")],
-    [#win("complex-minimax", "group_delay_ripple")],
-    [#win("minphase-truncation", "group_delay_ripple")],
-    [#win("low-group-delay", "group_delay_ripple")],
+    ..summary-methods
+      .map(method => (
+        method.at(1),
+        ..summary-criteria.map(criterion => [
+          #win(method.at(0), criterion.at(1))
+        ]),
+      ))
+      .flatten(),
   )
 }

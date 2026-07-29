@@ -328,31 +328,37 @@ are not reproducible across machines.
 |                 | phase interpolation      |   0.22262% |  0.026 |      20.40 |        0.889 |    1.74% |
 |                 | complex minimax          |   0.40295% |  0.123 |      20.39 |        0.873 |    1.74% |
 |                 | minimum-phase truncation |   0.00000% |  0.000 |       5.86 |        1.117 |   17.74% |
+|                 | budde-adaptive           |   0.00000% |  0.000 |       5.86 |        1.117 |   17.74% |
 |                 | low group delay          |  22.79885% |  1.898 |       1.76 |        6.676 |   24.37% |
 | parametric EQ   | Budde iterative          |   0.07904% |  0.006 |      22.21 |        6.994 |    0.00% |
 |                 | phase interpolation      |   1.35975% |  0.100 |      20.94 |        5.835 |    0.16% |
 |                 | complex minimax          |   2.58974% |  0.240 |      20.79 |        5.642 |    0.31% |
 |                 | minimum-phase truncation |   0.00428% |  0.000 |       6.21 |        6.996 |    0.00% |
+|                 | budde-adaptive           |   0.00428% |  0.000 |       6.21 |        6.996 |    0.00% |
 |                 | low group delay          |  21.59908% |  1.708 |       1.93 |        7.595 |    0.00% |
 | crossover       | Budde iterative          |   0.00001% |  0.001 |      26.41 |        0.766 |   44.77% |
 |                 | phase interpolation      |   0.07248% |  3.616 |      23.81 |        0.582 |   39.34% |
 |                 | complex minimax          |   0.09716% |  7.194 |      23.81 |        0.580 |   39.35% |
 |                 | minimum-phase truncation |   0.00000% |  0.000 |      10.41 |        0.766 |   44.77% |
+|                 | budde-adaptive           |   0.00000% |  0.000 |      10.41 |        0.766 |   44.77% |
 |                 | low group delay          |   7.11710% |  6.115 |       9.73 |        2.906 |   35.27% |
 | deep notch      | Budde iterative          |   0.14710% |  0.739 |      25.19 |        5.812 |    0.01% |
 |                 | phase interpolation      |   0.62083% |  3.083 |      22.55 |        4.673 |    0.00% |
 |                 | complex minimax          |   0.99023% |  2.547 |      22.51 |        4.787 |    0.02% |
 |                 | minimum-phase truncation |   0.00719% |  0.084 |       8.63 |        5.969 |    0.00% |
+|                 | budde-adaptive           |   0.00719% |  0.084 |       8.63 |        5.969 |    0.00% |
 |                 | low group delay          |   3.53804% |  0.514 |       6.67 |        7.182 |    0.00% |
 | room correction | Budde iterative          |   0.13143% |  0.080 |      16.50 |        1.227 |    0.00% |
 |                 | phase interpolation      |   0.28140% |  0.117 |      16.38 |        0.984 |    0.06% |
 |                 | complex minimax          |   0.70134% |  0.130 |      16.38 |        1.197 |    0.06% |
 |                 | minimum-phase truncation |   0.03625% |  0.023 |       0.50 |        1.218 |    0.00% |
+|                 | budde-adaptive           |   0.03625% |  0.023 |       0.50 |        1.218 |    0.00% |
 |                 | low group delay          |   8.63192% |  0.901 |       0.10 |        2.453 |    0.00% |
 | steep crossover | Budde iterative          |   2.50945% |  6.901 |      49.61 |        4.892 |   49.27% |
 |                 | phase interpolation      |   1.35880% | 54.483 |      53.04 |        3.235 |   48.11% |
 |                 | complex minimax          |   4.35239% | 72.233 |      53.02 |        3.289 |   47.98% |
 |                 | minimum-phase truncation |   1.22689% | 54.934 |      49.37 |        4.269 |   49.45% |
+|                 | budde-adaptive           |   2.63941% |  3.310 |      52.00 |        4.905 |   47.80% |
 |                 | low group delay          |   1.96151% | 42.838 |      49.44 |        4.482 |   49.41% |
 
 <!-- reference-results:end -->
@@ -386,6 +392,30 @@ ripple of the fixed-delay methods. `TestSteepTargetActuallyExercisesTheFactorisa
 guards both halves of this, so the suite cannot silently drift back to measuring
 only the degenerate case.
 
+`budde-adaptive` is the same construction with the delay budget chosen rather than
+supplied: it minimises RMS dB error over a candidate set of budgets that always
+contains zero, subject to relative error staying within three times the zero-delay
+value. Read its rows against `Budde iterative`. On all five smooth targets it selects
+zero and its row is therefore identical to `minimum-phase truncation` — the delay
+that bought nothing is simply not spent, and the 16.5-to-26.4-sample mean delays of
+the fixed budget become 0.5 to 10.4. On `steep-crossover` it selects 22 and reaches
+3.310 dB against the fixed budget's 6.901 dB. Across the six targets it holds the
+lowest RMS dB error on all six, the only method here to lead a column outright, and
+the lowest relative error on five; it concedes relative error only on
+`steep-crossover`, where it spends the slack the constraint allows (2.639% against
+1.227%). Measured against `minimum-phase truncation` on that target, the trade is
+70.8 dB more stopband rejection over the bins where the target is already below
+−80 dB, for 2.63 samples of mean group delay.
+
+Two cautions on that method. The candidate set is a strided scan with local
+refinement, not every admissible budget, so the selection is a heuristic — one
+fixture in the `mixedphase` tests is 0.76 dB short of the exhaustive result. And a
+hand-picked budget is hazardous in the other direction too: on `steep-crossover` a
+one-sample budget reaches 77.5% relative error, far worse than either endpoint,
+because a three-tap linear factor cannot approximate the residual quotient at all.
+`TestSmallDelayBudgetsAreTheWorstChoice` pins that, and it is the reason the budget
+should be selected rather than defaulted.
+
 The delay-ripple column is the one axis on which the alternating factorisation is
 consistently last among the fixed-delay methods: it inherits the minimum-phase
 factor's ripple almost exactly wherever the correction is inert.
@@ -395,8 +425,10 @@ its reweighting is multiplicative, so after sixteen passes the supplied
 inverse-magnitude weight has almost no influence left. The weight is worth having on
 the plain least-squares solution — 3.616 dB to 0.568 dB on the crossover — and
 almost nothing after a full minimax run. The direct low-delay optimiser wins mean
-delay on every target and keeps its 2 dB constraint, but its relative magnitude
-error grows accordingly; that tolerance is a deliberate dial, not a converged
+delay on five of the six targets and keeps its 2 dB constraint, but its relative
+magnitude error grows accordingly; on `steep-crossover` minimum-phase truncation is
+marginally lower (49.37 against 49.44 samples), because that target's own phase
+response already forces most of the delay; that tolerance is a deliberate dial, not a converged
 result. Its deep-notch peak delay is still large: mean delay near a spectral null
 must not be read as a peak-delay guarantee.
 

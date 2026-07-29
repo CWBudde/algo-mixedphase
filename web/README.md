@@ -62,7 +62,10 @@ the one target whose minimum-phase factor does not fit the taps the split alloca
 only fixture where the alternating correction has real work to do.
 
 `DesignLowGroupDelay` chooses its own delay, so its card replaces the delay control with
-the magnitude tolerance—the dial that actually buys delay for that method.
+the magnitude tolerance—the dial that actually buys delay for that method. The adaptive
+alternating method also chooses its own, by searching the budget rather than optimising
+against a tolerance, so its delay slider is hidden too; the "Delay used" metric row is
+where both report what they settled on.
 
 ## Tests
 

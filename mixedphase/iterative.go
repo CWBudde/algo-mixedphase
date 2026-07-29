@@ -130,6 +130,7 @@ func DesignIterative(prototype []float64, cfg IterativeConfig) (Result, error) {
 			Taps:             append([]float64(nil), minimumPart...),
 			MinimumPhasePart: minimumPart,
 			LinearPhasePart:  []float64{1},
+			Delay:            cfg.Delay,
 			Metrics:          metrics,
 		}, nil
 	}
@@ -158,6 +159,7 @@ func DesignIterative(prototype []float64, cfg IterativeConfig) (Result, error) {
 			Taps:             append([]float64(nil), linearPart...),
 			MinimumPhasePart: []float64{1},
 			LinearPhasePart:  linearPart,
+			Delay:            cfg.Delay,
 			Metrics:          metrics,
 		}, nil
 	}
@@ -294,6 +296,7 @@ func DesignIterative(prototype []float64, cfg IterativeConfig) (Result, error) {
 		Taps:             taps,
 		MinimumPhasePart: minimumPart,
 		LinearPhasePart:  linearPart,
+		Delay:            cfg.Delay,
 		Iterations:       performed,
 		Metrics:          metrics,
 	}, nil

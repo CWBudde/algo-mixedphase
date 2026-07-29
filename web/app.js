@@ -13,6 +13,7 @@ import {
   swapDesigns,
   targetNote,
   usesCutoff,
+  usesDelayControl,
 } from "./lab-state.mjs";
 import { ComparisonPlots } from "./plots.mjs";
 
@@ -115,6 +116,17 @@ const metricDefinitions = [
     delta: (value) => `${signed(value, 2)} pp`,
   },
   {
+    // The adaptive method's whole output is the budget it picked, and the low
+    // delay optimiser prescribes none, so this row cannot just echo the slider.
+    label: "Delay used",
+    value: (result) => result.usedDelay,
+    format: (value) => (value < 0 ? "not prescribed" : `${value} smp`),
+    // Differencing a selected budget against "not prescribed" would print a
+    // number that means nothing, so that pairing reports no delta at all.
+    deltaFrom: (a, b) =>
+      a < 0 || b < 0 ? "–" : `${signed(b - a, 0)} smp`,
+  },
+  {
     label: "Iterations run",
     value: (result) => result.iterations,
     format: (value) => `${value}`,
@@ -206,7 +218,7 @@ function renderControls() {
     controls.delayValue.textContent = `${design.delay} samples`;
     controls.toleranceValue.textContent = `${design.tolerance.toFixed(1)} dB`;
     controls.iterationsValue.textContent = design.iterations;
-    controls.delayControl.hidden = design.method === "lowdelay";
+    controls.delayControl.hidden = !usesDelayControl(design.method);
     controls.toleranceControl.hidden = design.method !== "lowdelay";
     controls.name.textContent = METHODS[design.method];
   }
@@ -312,9 +324,15 @@ function renderMetrics() {
     valueB.className = "metric-b";
     valueB.textContent = b === null ? "…" : metric.format(b);
     const delta = document.createElement("td");
-    delta.textContent = difference === null ? "…" : metric.delta(difference);
+    if (a === null || b === null) {
+      delta.textContent = "…";
+    } else if (metric.deltaFrom) {
+      delta.textContent = metric.deltaFrom(a, b);
+    } else {
+      delta.textContent = metric.delta(difference);
+    }
 
-    if (meaningful) {
+    if (meaningful && !(metric.deltaFrom && (a < 0 || b < 0))) {
       valueA.dataset.better = String(a < b);
       valueB.dataset.better = String(b < a);
     }

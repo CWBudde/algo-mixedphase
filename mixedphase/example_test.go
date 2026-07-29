@@ -143,3 +143,34 @@ func ExampleDesignIterative() {
 	// 9
 	// 5 5
 }
+
+// ExampleDesignIterativeAuto shows the delay budget being chosen rather than
+// supplied.
+//
+// This prototype is a nine-tap symmetric FIR designed into nine taps, so the
+// largest budget the split admits gives the linear-phase factor the whole filter
+// and reproduces the prototype exactly. The search finds that, where a
+// hand-picked budget would have had to guess it. On a target whose minimum-phase
+// factor fits the support instead, the same call returns a delay of zero and a
+// unit-impulse linear factor.
+func ExampleDesignIterativeAuto() {
+	prototype := []float64{
+		0.01, 0.04, 0.12, 0.20, 0.26, 0.20, 0.12, 0.04, 0.01,
+	}
+
+	result, err := mixedphase.DesignIterativeAuto(
+		prototype,
+		mixedphase.AutoIterativeConfig{Length: 9},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(result.Delay)
+	fmt.Println(len(result.MinimumPhasePart), len(result.LinearPhasePart))
+	fmt.Printf("%.3f dB\n", result.Metrics.RMSMagnitudeErrorDB)
+	// Output:
+	// 4
+	// 1 9
+	// 0.000 dB
+}

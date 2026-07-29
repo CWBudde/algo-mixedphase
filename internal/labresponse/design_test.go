@@ -169,6 +169,10 @@ var harnessEquivalent = map[string]Request{
 		Delay:      0,
 		Iterations: reference.IterativePasses,
 	},
+	"budde-adaptive": {
+		Method:     "adaptive",
+		Iterations: reference.IterativePasses,
+	},
 	"low-group-delay": {
 		Method:      "lowdelay",
 		ToleranceDB: reference.LowDelayToleranceDB,

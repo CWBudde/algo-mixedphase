@@ -1,9 +1,18 @@
 export const METHODS = Object.freeze({
   iterative: "Alternating factorisation",
+  adaptive: "Alternating, selected delay",
   interpolation: "Phase interpolation",
   minimax: "Least squares + minimax",
   lowdelay: "Magnitude-constrained low delay",
 });
+
+// Methods that choose their own delay, so the delay slider is meaningless for
+// them and the realised value is reported back instead.
+export const CHOOSES_DELAY = Object.freeze(["adaptive", "lowdelay"]);
+
+export function usesDelayControl(method) {
+  return !CHOOSES_DELAY.includes(method);
+}
 
 // LOWPASS_TARGET is the lab's own fixture and the only one whose shape the
 // cutoff slider controls. Every other entry is a fixed comparison target taken

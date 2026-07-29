@@ -320,6 +320,13 @@ type Result struct {
 	MinimumPhasePart []float64
 	LinearPhasePart  []float64
 
+	// Delay is the linear-phase delay budget the design used, in samples. It
+	// is the configured value for [DesignIterative] and the selected one for
+	// [DesignIterativeAuto], which is the field's reason for existing; the
+	// designs that choose their own delay report it through GroupDelay
+	// instead.
+	Delay int
+
 	// Iterations is the number of alternating correction passes accepted by
 	// [DesignIterative], of reweighting passes performed by
 	// [DesignComplexLeastSquares], or of accepted quasi-Newton steps performed

@@ -101,7 +101,7 @@ const initial = JSON.parse(
 );
 assert.deepEqual(initial, {
   ready: "true",
-  rows: 6,
+  rows: 7,
   aMethod: "iterative",
   bMethod: "interpolation",
   exportsEnabled: true,

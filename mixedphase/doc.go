@@ -1,12 +1,18 @@
 // Package mixedphase designs finite impulse response filters whose delay and
 // pre-ringing lie between the minimum- and linear-phase extremes.
 //
-// The package contains four complementary design methods:
+// The package contains five complementary design methods:
 //
 //   - [DesignIterative] implements the alternating factorisation proposed by
 //     Christian-W. Budde at DAGA 2012. It factors a target magnitude response
 //     into a causal minimum-phase part and a short linear-phase residual while
 //     repeatedly compensating the truncation error of each part.
+//   - [DesignIterativeAuto] runs that same factorisation but selects the delay
+//     budget instead of accepting one. It exists because a hand-picked budget is
+//     the factorisation's main practical hazard, in both directions: too large a
+//     budget on a target that does not need one buys nothing but latency, and a
+//     small non-zero budget on a target that does need one is worse than either
+//     extreme.
 //   - [DesignPhaseInterpolation] constructs a complex target response by
 //     interpolating between minimum and linear phase, then projects it onto a
 //     finite causal support. It is useful as a simple comparison baseline.
@@ -16,14 +22,17 @@
 //     weighted passband group delay subject to a magnitude tolerance, which is
 //     the formulation Wu, Gao and Teo use.
 //
-// All four operate on a real prototype impulse response. Its magnitude
+// All five operate on a real prototype impulse response. Its magnitude
 // response is the design target; its original phase is not otherwise used.
 //
 // # Prescribed phase versus optimised phase
 //
 // The methods differ in what they treat as given. [DesignIterative] derives the
 // phase distribution from a latency budget: the caller states a delay, and the
-// split between the two factors follows. [DesignPhaseInterpolation] and
+// split between the two factors follows. [DesignIterativeAuto] moves that one
+// step further and treats the latency as an output, searching the budget for the
+// deepest stopband it can reach without giving up more linear-magnitude accuracy
+// than the caller allows. [DesignPhaseInterpolation] and
 // [DesignComplexLeastSquares] instead prescribe the entire complex response and
 // then approximate it, so the caller states a phase curve — here parametrised
 // by the same mix between minimum and linear phase — and the design only
@@ -143,6 +152,17 @@
 // for the minimum-phase factor's share of the taps. When it is not, the honest
 // comparison is against Delay zero, which is the same design with the budget
 // removed and is usually better on every axis.
+//
+// [DesignIterativeAuto] applies that rule for the caller. Given the same six
+// fixtures it selects Delay zero on all five that fit — returning bit-for-bit
+// the minimum-phase design, so the degeneracy costs nothing instead of sixteen
+// samples — and Delay 22 on steep-crossover, where it reaches 3.310 dB RMS
+// magnitude error against the 6.901 dB the hand-picked budget of 16 achieves.
+// It is also what protects a caller from the opposite mistake: on that same
+// target a budget of 1 raises the relative magnitude error from 1.227% to 77.5%,
+// far worse than either extreme, so a small delay chosen to be economical is the
+// worst available choice. See TestAdaptiveDelaySelectionBeatsTheFixedBudget in
+// internal/reference.
 //
 // Where the factor is genuinely starved, the method earns its delay. On
 // steep-crossover at 129 taps and delay 16 it reaches 6.901 dB RMS magnitude

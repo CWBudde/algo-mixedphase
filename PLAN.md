@@ -66,6 +66,11 @@ Exit criteria:
 - [x] All methods share one comparison harness and publish reproducible quality/runtime
       results under fixed tap and delay budgets.
 - [x] The docs state which method wins under which constraint, and where each one fails.
+- [x] Act on what the benchmark showed. With the delay budget held fixed the alternating
+      construction leads no metric on any target, because on five of six the design
+      degenerates to a delayed minimum-phase filter. `DesignIterativeAuto` selects the
+      budget instead and is published as the `budde-adaptive` method; it leads RMS dB error
+      on all six targets and declines the budget wherever it would be wasted.
 
 ## Phase 4: Mixed Phase Lab comparison workbench (In progress)
 

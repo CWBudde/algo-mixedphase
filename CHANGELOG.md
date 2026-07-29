@@ -25,6 +25,37 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `mixedphase.DesignIterativeAuto` — the alternating factorisation with the delay
+  budget as an output rather than an input. It minimises RMS dB magnitude error,
+  the measure sensitive to the stopband depth the factorisation actually buys,
+  subject to linear-magnitude accuracy staying within a configurable multiple of
+  the zero-delay design's. Because a zero budget is always evaluated and always
+  admissible, the result can never be worse than minimum-phase truncation on that
+  objective, which removes the factorisation's main practical hazard in both
+  directions: on the five reference targets whose minimum-phase factor fits its
+  tap share it selects zero and returns that design bit-for-bit instead of paying
+  16 samples for a delayed copy, and on the support-starved eighth-order crossover
+  it selects 22 and reaches 3.310 dB against the hand-picked budget's 6.901 dB. It
+  also avoids the opposite trap, where a one-sample budget on that target is worse
+  than either extreme (77.5% relative error against 1.227% at zero). The search is
+  a strided scan plus local refinement, so it costs about 25 designs rather than
+  one and is only exact with `CoarseStep: 1`; `Result.Delay` reports what it
+  chose. No existing design's output changes.
+
+- Reference suite: `budde-adaptive`, the sixth published method, driving
+  `DesignIterativeAuto` under the same tap and grid budget. It selects a zero
+  budget on the five targets whose minimum-phase factor fits its tap share — where
+  its row is identical to `minphase-truncation` — and 22 samples on
+  `steep-crossover`, where it reaches 3.310 dB against `budde-iterative`'s
+  6.901 dB. Across the six targets it holds the lowest RMS dB error on all six,
+  the only method to lead a column outright, while `budde-iterative` leads none.
+  The `phase_delay_samples` column now carries the selected budget for that
+  method; every existing row is byte-identical.
+
+- Mixed Phase Lab: the adaptive method, and a "Delay used" metric row reporting
+  the budget each design actually applied — the adaptive method's only visible
+  output, and "not prescribed" for the low-delay optimiser.
+
 - Mixed Phase Lab: a target selector offering the six fixed fixtures from the published
   comparison alongside the adjustable low-pass. A benchmark target is driven on the harness
   grid with the harness weights, so at 129 taps and 16 samples of delay the lab reproduces

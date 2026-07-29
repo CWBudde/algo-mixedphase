@@ -14,6 +14,21 @@ var ErrInvalidTrials = errors.New("reference: trials must not be negative")
 type designMethod struct {
 	name   string
 	design func(Target) (mixedphase.Result, error)
+
+	// choosesDelay marks a design that selects its own linear-phase delay
+	// budget rather than honouring the suite's. The reported delay then comes
+	// from the design instead of from DelayBudget, which would otherwise put a
+	// number in the published table that the design never used.
+	choosesDelay bool
+}
+
+// reportedDelay is the linear-phase delay the published row should carry.
+func (m designMethod) reportedDelay(result mixedphase.Result) int {
+	if m.choosesDelay {
+		return result.Delay
+	}
+
+	return DelayBudget
 }
 
 // Run executes every general mixed-phase method against every reference
@@ -56,7 +71,7 @@ func Run(trials int) ([]Row, error) {
 
 			rows = append(rows, rowFromResult(
 				target.Name,
-				method.name,
+				method,
 				result,
 				runtime,
 				analysis,
@@ -140,6 +155,26 @@ func methods() []designMethod {
 			},
 		},
 		{
+			// The alternating factorisation with the delay budget as an output.
+			// It is listed beside budde-iterative rather than replacing it
+			// because the contrast between the two rows is the evidence: on five
+			// of the six targets this one declines the budget and deliberately
+			// reproduces minphase-truncation, which is exactly what the fixed
+			// budget should have done and did not.
+			name:         "budde-adaptive",
+			choosesDelay: true,
+			design: func(target Target) (mixedphase.Result, error) {
+				return mixedphase.DesignIterativeAuto(
+					target.Prototype,
+					mixedphase.AutoIterativeConfig{
+						Length:     TapCount,
+						FFTSize:    FFTSize,
+						Iterations: IterativePasses,
+					},
+				)
+			},
+		},
+		{
 			name: "low-group-delay",
 			design: func(target Target) (mixedphase.Result, error) {
 				return mixedphase.DesignLowGroupDelay(
@@ -196,7 +231,8 @@ func runDesign(
 }
 
 func rowFromResult(
-	target, method string,
+	target string,
+	method designMethod,
 	result mixedphase.Result,
 	runtime time.Duration,
 	analysis responseAnalysis,
@@ -205,11 +241,11 @@ func rowFromResult(
 
 	return Row{
 		Target:                 target,
-		Method:                 method,
+		Method:                 method.name,
 		SampleRate:             SampleRate,
 		Taps:                   len(result.Taps),
 		FFTSize:                FFTSize,
-		DelayBudget:            DelayBudget,
+		DelayBudget:            method.reportedDelay(result),
 		Iterations:             result.Iterations,
 		Runtime:                runtime,
 		RelativeMagnitudeError: metrics.RelativeMagnitudeError,

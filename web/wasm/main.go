@@ -70,6 +70,7 @@ func designMixedPhase(args []js.Value) any {
 	out.Set("groupDelay", floatArray(design.Realised.GroupDelay))
 	out.Set("referenceMagnitudeDB", floatArray(design.Prototype.MagnitudeDB))
 	out.Set("iterations", result.Iterations)
+	out.Set("usedDelay", design.UsedDelay)
 	out.Set("rmsErrorDB", result.Metrics.RMSMagnitudeErrorDB)
 	out.Set("maxErrorDB", result.Metrics.MaxMagnitudeErrorDB)
 	out.Set("relativeError", result.Metrics.RelativeMagnitudeError)
