@@ -1,6 +1,6 @@
 #import "charts.typ": (
   accuracy-delay-chart, cross-target-summary-table, cross-target-win-count,
-  graphiceq-chart, group-delay-response-chart, magnitude-response-chart,
+  graphiceq-chart, group-delay-response-chart, magnitude-response-chart, number,
   peak-aligned-impulse-chart, pre-ringing-chart, representative-results-table,
   signal-flow-diagram,
 )
@@ -445,11 +445,12 @@ the complex-response norm or band priorities are the actual specification.
 
 The parametric-EQ case exposes frequency-response shape and scalar metrics
 without the ill-conditioned stopband phase of a low-pass example. The impulse
-plot instead uses the first-order 1 kHz low-pass from the common suite, matching
-the target class illustrated in the original paper. This separation is
-deliberate: the smooth parametric-EQ residual is nearly an identity delayed to
-the centre of its linear-phase support, so it does not demonstrate how the
-alternating construction can spend the available pre-peak support.
+plot instead uses the fourth-order Linkwitz--Riley 2 kHz low-pass crossover
+fixture from the common suite. This separation is deliberate: the smooth
+parametric-EQ residual is nearly an identity delayed to the centre of its
+linear-phase support, so it does not demonstrate how the alternating
+construction can spend the available pre-peak support. The crossover requires
+enough residual shaping to make that distribution visible.
 
 Both examples use realised 129-tap filters at 48 kHz on the 1024-point design
 and analysis grid. The three prescribed-phase designs use $d=16$ samples. The
@@ -498,25 +499,44 @@ behaviour is visible here and is not captured by a single mean value.
 #figure(
   peak-aligned-impulse-chart(reference-impulse),
   caption: [
-    Peak-aligned realised impulse responses for the first-order 1 kHz low-pass
-    target and the same tap, grid, and optimiser budgets as
-    @representative-magnitude. Each response is divided by its own absolute
-    peak and displayed as coefficient magnitude in dB, with values below
-    −80 dB clipped to the plot floor. This intentionally discards coefficient
-    sign so low-level temporal detail remains visible. The horizontal origin
-    is each response's peak, so the plot compares temporal distribution rather
-    than gain. Source:
+    Peak-aligned realised impulse responses for the fourth-order
+    Linkwitz--Riley 2 kHz low-pass crossover target and the same tap, grid, and
+    optimiser budgets as @representative-magnitude. Each response is divided
+    by its own absolute peak and displayed as coefficient magnitude in dB,
+    with values below −80 dB clipped to the plot floor. This intentionally
+    discards coefficient sign so low-level temporal detail remains visible.
+    The horizontal origin is each response's peak, so the plot compares
+    temporal distribution rather than gain. Source:
     #code-path("docs/reference-impulse.csv").
   ],
 ) <representative-impulse>
 
 Peak alignment in @representative-impulse separates waveform shape from
-absolute latency. Unlike the parametric-EQ case, the low-pass residual makes
+absolute latency. Unlike the parametric-EQ case, the crossover residual makes
 substantial use of the support before the alternating response's peak. The
 plot therefore distinguishes a genuinely mixed-phase response from a
 minimum-phase response followed by an almost pure delay. Coefficient signs,
 full unnormalised values, peak indices, and the exact pre-peak energy ratios
 remain in the committed CSV and scalar result set.
+
+#let alternating-crossover = reference-results.find(row => (
+  row.at("target") == "crossover" and row.at("method") == "budde-iterative"
+))
+#let alternating-peq = reference-results.find(row => (
+  row.at("target") == "parametric-eq" and row.at("method") == "budde-iterative"
+))
+The committed scalar rows make the distinction explicit: the alternating
+crossover places
+#number(
+  100 * float(alternating-crossover.at("pre_peak_energy_ratio")),
+  digits: 1,
+)\% of its energy before the peak, while the smooth parametric-EQ case rounds
+to
+#number(
+  100 * float(alternating-peq.at("pre_peak_energy_ratio")),
+  digits: 3,
+)\%. The configured $d$ allocates support to the linear factor; it is not by
+itself proof that the target needs or uses that support.
 
 #figure(
   text(size: 7.5pt)[
@@ -589,6 +609,18 @@ corresponding row.
         and report accepted passes.
       ],
 
+      [Alternating support use],
+      [
+        If the minimum-phase factor already fits the target, the linear
+        residual approaches a centred impulse. The result then resembles a
+        minimum-phase response plus delay despite the available support.
+      ],
+      [
+        Inspect pre-peak energy and its distribution, not only peak index.
+        Increase the linear allocation or use a prescribed-phase method when
+        substantial pre-ringing is a requirement.
+      ],
+
       [Low-delay optimisation],
       [
         A linear-phase start can remain in a substantially worse local basin
@@ -637,11 +669,12 @@ corresponding row.
   ],
 ) <failure-mode-table>
 
-The first three rows are algorithmic limitations: stopping, initialisation, or
-weighting changes the solution. The fourth is a measurement limitation and
-must not be mistaken for filter latency. The fifth is a target-class
-limitation: the hybrid result in @graphiceq-tradeoff applies to smooth
-low-frequency band trajectories, not arbitrary graphic-EQ gain sequences.
+The first four rows are algorithmic limitations: stopping, factor utilisation,
+initialisation, or weighting changes the solution. The fifth is a measurement
+limitation and must not be mistaken for filter latency. The sixth is a
+target-class limitation: the hybrid result in @graphiceq-tradeoff applies to
+smooth low-frequency band trajectories, not arbitrary graphic-EQ gain
+sequences.
 
 = Reproducibility appendix
 
@@ -769,12 +802,13 @@ revision shown on the title page.
     #code-path("docs/reference-results.csv"); all three are byte-compared by
     #code-path("TestRepresentativeResponsesCoverRealisedDesigns") or
     #code-path("TestRunCoversEveryMethodAndMetric"). _Budget:_ the
-    parametric-EQ response target and first-order 1 kHz low-pass impulse target
-    at 48 kHz, $N=129$, $K=1024$, $d=16$ for prescribed phase, and the exact
-    weights, tolerances, and iteration limits listed under “Representative
-    realised responses.” The reference test additionally requires the plotted
-    alternating low-pass to place at least 10% of its energy before its peak.
-    _Reproduce:_ `just compare-check`; rebuild with `just paper`.
+    parametric-EQ response target and fourth-order Linkwitz--Riley 2 kHz
+    low-pass crossover impulse target at 48 kHz, $N=129$, $K=1024$, $d=16$ for
+    prescribed phase, and the exact weights, tolerances, and iteration limits
+    listed under “Representative realised responses.” The reference test
+    additionally requires the plotted alternating crossover to place at least
+    10% of its energy and at least eight coefficients above −40 dB before its
+    peak. _Reproduce:_ `just compare-check`; rebuild with `just paper`.
 
   - *@graphiceq-tradeoff.* _Generator:_ #code-path("examples/graphiceq").
     _Artifact:_ #code-path("docs/graphiceq-results.csv"). Each hybrid split is
@@ -786,7 +820,10 @@ revision shown on the title page.
   - *@failure-mode-table.* _Implementation and evidence:_ correction-loop
     instability is guarded by
     #code-path("TestIterativeStopsBeforeRisingError") and
-    #code-path("TestIterativeConditioning"); initialisation sensitivity by
+    #code-path("TestIterativeConditioning"); support utilisation by the
+    alternating crossover assertions in
+    #code-path("TestRepresentativeResponsesCoverRealisedDesigns");
+    initialisation sensitivity by
     #code-path("TestLowGroupDelayDependsOnInitialisation"); zero-weight bins by
     #code-path("TestUnweightedBandsAreUnconstrained"); stopband-delay masking by
     #code-path("TestDefaultDelayWeightMasksSpectralNulls") and

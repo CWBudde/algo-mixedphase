@@ -45,7 +45,7 @@ against these executable paths:
 
 The review confirmed that configuration limits are described as budgets rather
 than convergence claims, the final support is measured from realised taps, and
-the five documented failure modes have named regression tests. Public upstream
+the six documented failure modes have named regression tests. Public upstream
 dependencies are used through their exported APIs.
 
 ## Quantitative evidence audit
@@ -60,9 +60,9 @@ mathematical constants, but no measured result value. The evidence paths are:
 - `docs/reference-results.csv` for cross-target scalar metrics;
 - `docs/reference-response.csv` for the representative parametric-EQ frequency
   responses;
-- `docs/reference-impulse.csv` for the first-order 1 kHz low-pass impulse
-  responses, including a regression check that the alternating result uses
-  meaningful pre-peak energy; and
+- `docs/reference-impulse.csv` for the fourth-order Linkwitz–Riley 2 kHz
+  low-pass crossover impulse responses, including regression checks that the
+  alternating result uses meaningful, distributed pre-peak energy; and
 - `docs/graphiceq-results.csv` for the structure-specific latency comparison.
 
 `just compare-check` regenerates these files and requires a byte-identical

@@ -67,9 +67,10 @@ Normal paper builds consume committed data and never rerun timing benchmarks. Th
 read `docs/reference-results.csv`, `docs/reference-response.csv`,
 `docs/reference-impulse.csv`, and `docs/graphiceq-results.csv` directly. The response
 artifact contains the realised parametric-EQ designs used for the magnitude and weighted
-group-delay figures. The impulse artifact uses the first-order 1 kHz low-pass target so the
-peak-aligned plot visibly exercises the alternating design's pre-peak support. Only the
-explicit `just paper-refresh` command reruns the benchmark generators.
+group-delay figures. The impulse artifact uses the fourth-order Linkwitz–Riley 2 kHz
+low-pass crossover target so the peak-aligned plot visibly exercises the alternating
+design's pre-peak support. Only the explicit `just paper-refresh` command reruns the
+benchmark generators.
 
 The reproducibility appendix maps every public design method, numbered equation, figure,
 and table to its implementation, named tests, exact reference budget, artifact, and
@@ -80,9 +81,9 @@ quality data deliberately contain no wall-clock values; those live separately in
 `docs/reference-timings.csv`.
 
 The paper gives failure cases their own numbered table rather than leaving them as scattered
-caveats. Correction-loop instability, optimiser initialisation sensitivity, zero-weight
-bins, stopband group-delay masking, and the hybrid graphic-EQ target-class limit each map to
-a named regression test in the reproducibility appendix.
+caveats. Correction-loop instability, unused alternating support, optimiser initialisation
+sensitivity, zero-weight bins, stopband group-delay masking, and the hybrid graphic-EQ
+target-class limit each map to a named regression test in the reproducibility appendix.
 
 The completed editorial audit is recorded in
 [`TECHNICAL_REVIEW.md`](TECHNICAL_REVIEW.md). It checks historical attribution against the
