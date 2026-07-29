@@ -80,8 +80,12 @@ just compare       # Regenerate the committed comparison and paper-response CSVs
 just compare-check # Prove those files are byte-reproducible
 ```
 
-The comparison artifacts carry no timings, so they are byte-identical on every run and
-every machine, and CI fails if regenerating them changes a single byte. Machine-local
+The comparison artifacts carry no timings, so they are byte-identical across runs on a
+fixed platform and toolchain, and CI fails if regenerating them changes a single byte.
+They are not byte-identical across build targets: rebuilding the suite for `js/wasm`
+moves several `low-group-delay` rows, because the optimiser's accumulation order
+differs. Only `TestIterativeCrossBuildDeterminism` and `TestIterativeConditioning` are
+checked in both builds. Machine-local
 runtimes live separately in `docs/reference-timings.csv` (`just compare-timings`).
 
 `docs/graphiceq-results.csv` places each hybrid split next to an all-FIR design

@@ -25,6 +25,11 @@ jobs:
       - name: Install Just
         uses: extractions/setup-just@v2
 
+      # `go test` links its own main, so a package that fails to build as a
+      # command still passes the test suite. Build explicitly first.
+      - name: Build
+        run: go build ./...
+
       - name: Test
         run: go test ./...
 

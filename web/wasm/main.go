@@ -7,6 +7,7 @@ import (
 	"syscall/js"
 
 	"github.com/cwbudde/algo-mixedphase/graphiceq"
+	"github.com/cwbudde/algo-mixedphase/internal/labresponse"
 	"github.com/cwbudde/algo-mixedphase/mixedphase"
 )
 
@@ -36,7 +37,14 @@ func designMixedPhase(args []js.Value) any {
 	iterations := intField(request, "iterations", 12)
 	toleranceDB := floatField(request, "toleranceDB", 1)
 
-	prototype := lowpassPrototype(length, cutoff)
+	// The lab is an untrusted boundary: a negative length would panic inside
+	// make and tear the WebAssembly instance down, and a single tap would
+	// divide by zero and emit NaN curves. Reject both here.
+	prototype, err := labresponse.LowpassPrototype(length, cutoff)
+	if err != nil {
+		return errorObject(err.Error())
+	}
+
 	maximumDelay := (length - 1) / 2
 	mix := 0.0
 
@@ -44,10 +52,7 @@ func designMixedPhase(args []js.Value) any {
 		mix = min(float64(delay)/float64(maximumDelay), 1)
 	}
 
-	var (
-		result mixedphase.Result
-		err    error
-	)
+	var result mixedphase.Result
 
 	switch request.Get("method").String() {
 	case "iterative":
@@ -73,9 +78,11 @@ func designMixedPhase(args []js.Value) any {
 	case "lowdelay":
 		result, err = mixedphase.DesignLowGroupDelay(
 			prototype,
+			// FFTSize is left at its default so that the grid always
+			// oversamples the requested length; a fixed size would be too
+			// coarse to measure against once the user asks for a long filter.
 			mixedphase.LowGroupDelayConfig{
 				Length:      length,
-				FFTSize:     512,
 				ToleranceDB: toleranceDB,
 				Iterations:  iterations,
 			},
@@ -88,14 +95,14 @@ func designMixedPhase(args []js.Value) any {
 		return errorObject(err.Error())
 	}
 
-	response := newResponse(result.Taps)
-	reference := newResponse(prototype)
+	response := labresponse.New(result.Taps)
+	reference := labresponse.New(prototype)
 
 	out := js.Global().Get("Object").New()
 	out.Set("taps", floatArray(result.Taps))
-	out.Set("magnitudeDB", floatArray(response.magnitudeDB))
-	out.Set("groupDelay", floatArray(response.groupDelay))
-	out.Set("referenceMagnitudeDB", floatArray(reference.magnitudeDB))
+	out.Set("magnitudeDB", floatArray(response.MagnitudeDB))
+	out.Set("groupDelay", floatArray(response.GroupDelay))
+	out.Set("referenceMagnitudeDB", floatArray(reference.MagnitudeDB))
 	out.Set("iterations", result.Iterations)
 	out.Set("rmsErrorDB", result.Metrics.RMSMagnitudeErrorDB)
 	out.Set("maxErrorDB", result.Metrics.MaxMagnitudeErrorDB)

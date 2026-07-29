@@ -8,10 +8,11 @@
 // budget at all, and the remaining FIR only has to resolve the bands above the
 // split.
 //
-// The construction follows Bruschi, Välimäki, Liski and Cecchi, “Digital Filter
-// Design for Low-Latency Graphic Equalization” (DAFx 2022), which replaces the
-// lowest linear-phase band with a shelving filter and reports roughly half the
-// latency of the all-FIR design.
+// The construction follows Bruschi, Välimäki, Liski and Cecchi, “A Low-Latency
+// Quasi-Linear-Phase Octave Graphic Equalizer”, Proceedings of the 25th
+// International Conference on Digital Audio Effects (DAFx20in22), Vienna,
+// pp. 94–100, which replaces the lowest linear-phase band with a shelving
+// filter and reports roughly half the latency of the all-FIR design.
 //
 // # Why the latency halves
 //
@@ -40,9 +41,10 @@
 //	        4   193       96   0.068    0.914
 //
 // The first row is the all-FIR reference. Offloading one band therefore halves
-// the latency at a peak error that is unchanged within measurement noise, which
-// is the DAFx result; offloading four halves it four times over while the peak
-// error grows by less than a factor of two.
+// the latency while the peak error moves from 0.580 dB to 0.603 dB, which is
+// the DAFx result; offloading four halves it four times over while the peak
+// error grows by less than a factor of two. The design is deterministic, so
+// that 0.023 dB is a real change rather than measurement scatter.
 //
 // Against an all-FIR design cut to the same tap count — the comparison that
 // decides whether the split is worth anything — the hybrid wins throughout:
@@ -63,8 +65,15 @@
 // band spacing, which is the normal case for a room or loudspeaker correction
 // and not the case for an EQ used as a comb.
 //
-// All of these numbers come from the package tests and examples/graphiceq, so
-// they can be re-derived rather than trusted.
+// The table above and the equal-latency comparison come from
+// examples/graphiceq, which writes docs/graphiceq-results.csv, so they can be
+// re-derived rather than trusted. The three zigzag figures are produced by
+// TestZigzagPeakErrorsBySplit.
+//
+// Degradation on that target is not monotone in the number of offloaded bands:
+// three bands (10.56 dB) recovers some of what two bands (19.58 dB) loses,
+// because the shelf cascade happens to align better with the alternating
+// target. Do not read the split count as a quality dial here.
 //
 // # Scope
 //

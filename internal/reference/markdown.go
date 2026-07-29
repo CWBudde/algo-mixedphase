@@ -47,11 +47,18 @@ func UpdateMarkdownTable(path string, rows []Row) error {
 }
 
 func markdownTable(rows []Row) string {
+	// RMS dB error and group-delay ripple are carried here as well as in the
+	// CSV. Relative error alone favours whichever design fits the passband, and
+	// ripple is the only published column that measures phase behaviour at all —
+	// leaving it out hid the axis on which the alternating factorisation is
+	// weakest.
 	header := []string{
 		"Target",
 		"Method",
 		"Rel. error",
+		"RMS dB",
 		"Mean delay",
+		"Delay ripple",
 		"Pre-peak",
 	}
 	tableRows := make([][]string, 0, len(rows))
@@ -74,7 +81,9 @@ func markdownTable(rows []Row) string {
 			target,
 			displayName(row.Method),
 			fmt.Sprintf("%.5f%%", 100*row.RelativeMagnitudeError),
+			fmt.Sprintf("%.3f", row.RMSMagnitudeErrorDB),
 			fmt.Sprintf("%.2f", row.MeanGroupDelay),
+			fmt.Sprintf("%.3f", row.GroupDelayRipple),
 			fmt.Sprintf("%.2f%%", 100*row.PrePeakEnergyRatio),
 		}
 		tableRows = append(tableRows, values)
@@ -148,12 +157,16 @@ func displayName(name string) string {
 		return "complex minimax"
 	case "low-group-delay":
 		return "low group delay"
+	case "minphase-truncation":
+		return "minimum-phase truncation"
 	case "parametric-eq":
 		return "parametric EQ"
 	case "deep-notch":
 		return "deep notch"
 	case "room-correction":
 		return "room correction"
+	case "steep-crossover":
+		return "steep crossover"
 	default:
 		return name
 	}

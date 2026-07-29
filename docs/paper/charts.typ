@@ -12,6 +12,7 @@
   "#007782",
   "#be6b00",
   "#4c5560",
+  "#3f7a3f",
   "#944d73",
 )
 
@@ -42,8 +43,10 @@
   1
 } else if method == "complex-minimax" {
   2
-} else {
+} else if method == "minphase-truncation" {
   3
+} else {
+  4
 }
 
 #let method-label(method) = if method == "budde-iterative" {
@@ -52,6 +55,8 @@
   "Phase interpolation"
 } else if method == "complex-minimax" {
   "Complex minimax"
+} else if method == "minphase-truncation" {
+  "Minimum-phase truncation"
 } else {
   "Low group delay"
 }
@@ -62,6 +67,7 @@
   "crossover",
   "deep-notch",
   "room-correction",
+  "steep-crossover",
 )
 
 #let cross-target-win-count(rows, method, key) = {
@@ -80,6 +86,8 @@
   "13 7"
 } else if method == "complex-minimax" {
   "3 6"
+} else if method == "minphase-truncation" {
+  "2 4"
 } else {
   "13 5 3 5"
 }
@@ -541,6 +549,7 @@
     "budde-iterative",
     "phase-interpolation",
     "complex-minimax",
+    "minphase-truncation",
     "low-group-delay",
   )
   methods
@@ -573,6 +582,7 @@
       ("budde-iterative", method-label("budde-iterative")),
       ("phase-interpolation", method-label("phase-interpolation")),
       ("complex-minimax", method-label("complex-minimax")),
+      ("minphase-truncation", method-label("minphase-truncation")),
       ("low-group-delay", method-label("low-group-delay")),
     )
   } else {
@@ -580,6 +590,7 @@
       ("budde-iterative", method-label("budde-iterative")),
       ("phase-interpolation", method-label("phase-interpolation")),
       ("complex-minimax", method-label("complex-minimax")),
+      ("minphase-truncation", method-label("minphase-truncation")),
       ("low-group-delay", method-label("low-group-delay")),
     )
   }
@@ -653,16 +664,18 @@
     ("crossover", "XO"),
     ("deep-notch", "Notch"),
     ("room-correction", "Room"),
+    ("steep-crossover", "Steep XO"),
   )
   let methods = (
     "budde-iterative",
     "phase-interpolation",
     "complex-minimax",
+    "minphase-truncation",
     "low-group-delay",
   )
   let y-pos(value) = y-linear(value, 0, 50)
-  let group-width = (plot-right - plot-left) / 5
-  let bar-width = 21
+  let group-width = (plot-right - plot-left) / 6
+  let bar-width = 14
   let bars = targets
     .enumerate()
     .map(target-pair => {
@@ -835,6 +848,7 @@
     "budde-iterative",
     "phase-interpolation",
     "complex-minimax",
+    "minphase-truncation",
     "low-group-delay",
   )
   let lines = methods
@@ -876,6 +890,7 @@
     "budde-iterative",
     "phase-interpolation",
     "complex-minimax",
+    "minphase-truncation",
     "low-group-delay",
   )
   let lines = methods
@@ -912,6 +927,7 @@
     "budde-iterative",
     "phase-interpolation",
     "complex-minimax",
+    "minphase-truncation",
     "low-group-delay",
   )
   let lines = methods
@@ -953,43 +969,56 @@
 #let cross-target-summary-table(rows) = {
   let win(method, key) = cross-target-win-count(rows, method, key)
   table(
-    columns: (1.45fr, 0.52fr, 0.52fr, 0.52fr, 0.52fr),
-    align: (left, center, center, center, center),
+    columns: (1.2fr, 0.46fr, 0.46fr, 0.46fr, 0.46fr, 0.46fr),
+    align: (left, center, center, center, center, center),
     table.header(
       [Criterion],
       [Alternating],
       [Phase interpolation],
       [Complex minimax],
+      [Min-phase truncation],
       [Low group delay],
     ),
     [Lowest relative magnitude error],
     [#win("budde-iterative", "relative_magnitude_error")],
     [#win("phase-interpolation", "relative_magnitude_error")],
     [#win("complex-minimax", "relative_magnitude_error")],
+    [#win("minphase-truncation", "relative_magnitude_error")],
     [#win("low-group-delay", "relative_magnitude_error")],
 
     [Lowest RMS magnitude error],
     [#win("budde-iterative", "rms_magnitude_error_db")],
     [#win("phase-interpolation", "rms_magnitude_error_db")],
     [#win("complex-minimax", "rms_magnitude_error_db")],
+    [#win("minphase-truncation", "rms_magnitude_error_db")],
     [#win("low-group-delay", "rms_magnitude_error_db")],
 
     [Lowest mean group delay],
     [#win("budde-iterative", "mean_group_delay")],
     [#win("phase-interpolation", "mean_group_delay")],
     [#win("complex-minimax", "mean_group_delay")],
+    [#win("minphase-truncation", "mean_group_delay")],
     [#win("low-group-delay", "mean_group_delay")],
 
     [Least pre-peak energy],
     [#win("budde-iterative", "pre_peak_energy_ratio")],
     [#win("phase-interpolation", "pre_peak_energy_ratio")],
     [#win("complex-minimax", "pre_peak_energy_ratio")],
+    [#win("minphase-truncation", "pre_peak_energy_ratio")],
     [#win("low-group-delay", "pre_peak_energy_ratio")],
 
     [Smallest coefficient range],
     [#win("budde-iterative", "coefficient_range_db")],
     [#win("phase-interpolation", "coefficient_range_db")],
     [#win("complex-minimax", "coefficient_range_db")],
+    [#win("minphase-truncation", "coefficient_range_db")],
     [#win("low-group-delay", "coefficient_range_db")],
+
+    [Least group-delay ripple],
+    [#win("budde-iterative", "group_delay_ripple")],
+    [#win("phase-interpolation", "group_delay_ripple")],
+    [#win("complex-minimax", "group_delay_ripple")],
+    [#win("minphase-truncation", "group_delay_ripple")],
+    [#win("low-group-delay", "group_delay_ripple")],
   )
 }

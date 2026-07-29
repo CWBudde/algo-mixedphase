@@ -60,7 +60,7 @@ implemented or evaluated 2012 results.
 The point of this repository is that the paper's claims are re-runnable. When a figure or
 table corresponds to a measurement here, the reproducibility appendix in `paper.typ`
 records the implementation, evidence, configuration budget, and command that reproduces it.
-`just compare` regenerates the comparison CSVs, and the package tests carry the assertions
+`just compare` regenerates the comparison CSVs, and named package tests carry the assertions
 behind quoted numbers.
 
 Normal paper builds consume committed data and never rerun timing benchmarks. The charts

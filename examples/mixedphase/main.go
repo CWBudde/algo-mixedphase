@@ -1,9 +1,11 @@
 // Command mixedphase runs the fixed Phase 3 reference suite.
 //
 // The default invocation is deterministic: it takes no timings, so its CSV is
-// byte-identical across runs and machines and can serve as the committed
-// regression golden. Pass -timings to additionally measure runtime into a
-// separate, deliberately non-reproducible artifact.
+// byte-identical across runs on a fixed platform and toolchain and can serve as
+// the committed regression golden. It is not byte-identical across build
+// targets — a js/wasm build moves several low-group-delay rows — so the gate
+// only holds for the platform CI runs on. Pass -timings to additionally measure
+// runtime into a separate, deliberately non-reproducible artifact.
 package main
 
 import (

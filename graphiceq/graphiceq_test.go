@@ -230,6 +230,52 @@ func TestZigzagTargetDefeatsTheSplit(t *testing.T) {
 	}
 }
 
+// TestZigzagPeakErrorsBySplit pins the individual figures quoted in the package
+// documentation, which TestZigzagTargetDefeatsTheSplit does not: that test uses
+// three offloaded bands and asserts only a ratio.
+//
+// The progression is deliberately recorded as data rather than described as a
+// trend, because it is not monotone: three bands recovers part of what two
+// bands loses.
+func TestZigzagPeakErrorsBySplit(t *testing.T) {
+	gains := make([]float64, len(testGains))
+	for i := range gains {
+		gains[i] = 12
+		if i%2 == 1 {
+			gains[i] = -12
+		}
+	}
+
+	bands := octaveBands(gains)
+
+	want := []struct {
+		iirBands int
+		peakDB   float64
+	}{
+		{iirBands: 0, peakDB: 3.60},
+		{iirBands: 1, peakDB: 4.00},
+		{iirBands: 2, peakDB: 19.58},
+		{iirBands: 3, peakDB: 10.56},
+	}
+
+	for _, expected := range want {
+		result := designOrFail(t, Config{
+			SampleRate: testSampleRate,
+			Bands:      bands,
+			IIRBands:   expected.iirBands,
+		})
+
+		if difference := math.Abs(result.Metrics.MaxErrorDB - expected.peakDB); difference > 0.01 {
+			t.Errorf(
+				"%d offloaded bands: peak error = %.4f dB, want %.2f dB",
+				expected.iirBands,
+				result.Metrics.MaxErrorDB,
+				expected.peakDB,
+			)
+		}
+	}
+}
+
 func TestAllFIRDesignHasNoSections(t *testing.T) {
 	result := designOrFail(t, Config{
 		SampleRate: testSampleRate,

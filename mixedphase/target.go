@@ -3,8 +3,6 @@ package mixedphase
 import (
 	"math"
 	"math/cmplx"
-
-	"github.com/cwbudde/algo-dsp/dsp/spectrum"
 )
 
 // prescribedResponse builds the conjugate-symmetric complex target whose
@@ -14,21 +12,23 @@ import (
 // A mix of zero prescribes minimum phase, a mix of one prescribes linear phase.
 // Everything in between is the mixed-phase family both direct designs
 // approximate.
+//
+// minimumPhase must be the continuous phase produced by [minimumPhaseSpectrum]
+// rather than one recovered from a spectrum. Interpolating a wrapped phase is
+// not the same operation: at a bin where the true phase has passed -3*pi, a
+// wrapped value of -pi would be blended with the linear-phase target as though
+// the design were a full turn ahead of where it is, and the interpolated
+// response would be wrong by 2*pi*mix radians there. The endpoints mix = 0 and
+// mix = 1 happen to be immune, because a whole turn is invisible after
+// [cmplx.Rect]; every value in between is not.
 func prescribedResponse(
 	w *fftWorkspace,
 	targetMagnitude []float64,
-	minimumSpectrum []complex128,
+	minimumPhase []float64,
 	mix float64,
 	delay float64,
 ) []complex128 {
 	half := w.size / 2
-
-	minimumPhase := make([]float64, half+1)
-	for i := range minimumPhase {
-		minimumPhase[i] = cmplx.Phase(minimumSpectrum[i])
-	}
-
-	minimumPhase = spectrum.UnwrapPhase(minimumPhase)
 
 	desired := make([]complex128, w.size)
 

@@ -775,3 +775,201 @@ func lowpassPrototype(length int, cutoff float64) []float64 {
 
 	return taps
 }
+
+// TestIterativeDelaySweep pins every row of the delay-sweep table in
+// docs/MIXED_PHASE_FILTER_DESIGN.md.
+//
+// TestIterativeCrossBuildDeterminism covers the delay-8 row only, so the
+// document's claim that it pinned "these metrics" was true of one row out of
+// five. The budget is the default grid, twelve passes and the default stopping
+// tolerance; quoting any of these numbers without that budget is meaningless,
+// because the accepted-pass count moves with it.
+func TestIterativeDelaySweep(t *testing.T) {
+	prototype := lowpassPrototype(129, 0.08)
+
+	want := []struct {
+		delay                  int
+		passes                 int
+		relativeMagnitudeError float64
+		rmsMagnitudeErrorDB    float64
+	}{
+		{delay: 0, passes: 0, relativeMagnitudeError: 0.000096348, rmsMagnitudeErrorDB: 0.800068},
+		{delay: 8, passes: 2, relativeMagnitudeError: 0.005426207, rmsMagnitudeErrorDB: 4.609232},
+		{delay: 16, passes: 1, relativeMagnitudeError: 0.013427020, rmsMagnitudeErrorDB: 7.469879},
+		{delay: 32, passes: 1, relativeMagnitudeError: 0.004819747, rmsMagnitudeErrorDB: 8.623192},
+		{delay: 64, passes: 0, relativeMagnitudeError: 0.001575002, rmsMagnitudeErrorDB: 21.639157},
+	}
+
+	for _, expected := range want {
+		result, err := DesignIterative(prototype, IterativeConfig{
+			Length:     129,
+			Delay:      expected.delay,
+			Iterations: 12,
+		})
+		if err != nil {
+			t.Fatalf("delay %d: DesignIterative() error = %v", expected.delay, err)
+		}
+
+		if result.Iterations != expected.passes {
+			t.Errorf(
+				"delay %d: accepted passes = %d, want %d",
+				expected.delay,
+				result.Iterations,
+				expected.passes,
+			)
+		}
+
+		if difference := math.Abs(
+			result.Metrics.RelativeMagnitudeError - expected.relativeMagnitudeError,
+		); difference > 5e-9 {
+			t.Errorf(
+				"delay %d: relative magnitude error = %.9f, want %.9f",
+				expected.delay,
+				result.Metrics.RelativeMagnitudeError,
+				expected.relativeMagnitudeError,
+			)
+		}
+
+		if difference := math.Abs(
+			result.Metrics.RMSMagnitudeErrorDB - expected.rmsMagnitudeErrorDB,
+		); difference > 5e-6 {
+			t.Errorf(
+				"delay %d: RMS magnitude error = %.6f dB, want %.6f dB",
+				expected.delay,
+				result.Metrics.RMSMagnitudeErrorDB,
+				expected.rmsMagnitudeErrorDB,
+			)
+		}
+	}
+}
+
+// TestLinearFactorIsSymmetricAtInteriorDelays checks the circular-to-symmetric
+// extraction in designLinearPart at a delay where both factors are non-trivial.
+//
+// The existing symmetry check covers only the maximum delay, where the
+// minimum-phase factor collapses to a single tap and the linear factor is the
+// whole filter. That endpoint would survive an off-by-one in the modular wrap
+// that reads the zero-phase response either side of index zero; an interior
+// delay would not.
+func TestLinearFactorIsSymmetricAtInteriorDelays(t *testing.T) {
+	prototype := lowpassPrototype(129, 0.08)
+
+	for _, delay := range []int{4, 8, 16, 32} {
+		result, err := DesignIterative(prototype, IterativeConfig{
+			Length:     129,
+			Delay:      delay,
+			Iterations: 12,
+		})
+		if err != nil {
+			t.Fatalf("delay %d: DesignIterative() error = %v", delay, err)
+		}
+
+		factor := result.LinearPhasePart
+		if len(factor) != 2*delay+1 {
+			t.Fatalf(
+				"delay %d: linear factor length = %d, want %d",
+				delay,
+				len(factor),
+				2*delay+1,
+			)
+		}
+
+		if len(result.MinimumPhasePart) < 2 {
+			t.Fatalf("delay %d: minimum factor collapsed, test is vacuous", delay)
+		}
+
+		centre := delay
+		for offset := 1; offset <= delay; offset++ {
+			left := factor[centre-offset]
+			right := factor[centre+offset]
+
+			if difference := math.Abs(left - right); difference > 1e-12 {
+				t.Errorf(
+					"delay %d: factor[%d] = %.17g and factor[%d] = %.17g differ by %.3g",
+					delay,
+					centre-offset,
+					left,
+					centre+offset,
+					right,
+					difference,
+				)
+			}
+		}
+	}
+}
+
+// TestAlternationRedesignsBothFactorsPerPass pins the order of the alternating
+// updates, which no test asserted and which the package doc comment previously
+// described incorrectly.
+//
+// The paper alternates which factor the residual quotient is formed against.
+// The implementation packs one full alternation into each loop pass: it
+// redesigns the minimum factor from the quotient against the current linear
+// factor, then the linear factor from the quotient against that new minimum
+// factor. The observable consequence is that a single accepted pass already
+// moves both factors away from the uncorrected starting split.
+func TestAlternationRedesignsBothFactorsPerPass(t *testing.T) {
+	prototype := lowpassPrototype(129, 0.08)
+
+	base := IterativeConfig{Length: 129, Delay: 16}
+
+	uncorrected := base
+	uncorrected.Iterations = -1
+
+	initial, err := DesignIterative(prototype, uncorrected)
+	if err != nil {
+		t.Fatalf("uncorrected DesignIterative() error = %v", err)
+	}
+
+	if initial.Iterations != 0 {
+		t.Fatalf("uncorrected Iterations = %d, want 0", initial.Iterations)
+	}
+
+	onePass := base
+	onePass.Iterations = 1
+
+	corrected, err := DesignIterative(prototype, onePass)
+	if err != nil {
+		t.Fatalf("one-pass DesignIterative() error = %v", err)
+	}
+
+	if corrected.Iterations != 1 {
+		t.Fatalf("one-pass Iterations = %d, want 1", corrected.Iterations)
+	}
+
+	movedMinimum := maximumDeviation(
+		initial.MinimumPhasePart,
+		corrected.MinimumPhasePart,
+	)
+	movedLinear := maximumDeviation(
+		initial.LinearPhasePart,
+		corrected.LinearPhasePart,
+	)
+
+	if movedMinimum <= 1e-12 {
+		t.Errorf(
+			"minimum factor moved by %.3g in one pass, want a redesign",
+			movedMinimum,
+		)
+	}
+
+	if movedLinear <= 1e-12 {
+		t.Errorf(
+			"linear factor moved by %.3g in one pass, want a redesign",
+			movedLinear,
+		)
+	}
+}
+
+func maximumDeviation(before, after []float64) float64 {
+	if len(before) != len(after) {
+		return math.Inf(1)
+	}
+
+	worst := 0.0
+	for i := range before {
+		worst = math.Max(worst, math.Abs(before[i]-after[i]))
+	}
+
+	return worst
+}

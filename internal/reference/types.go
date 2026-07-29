@@ -34,11 +34,20 @@ const (
 )
 
 // Target is one fixed magnitude-response fixture and the frequency weights
-// used to assess its group delay.
+// used to assess its group delay and to weight its approximation error.
 type Target struct {
-	Name        string
-	Prototype   []float64
+	Name      string
+	Prototype []float64
+
+	// DelayWeight selects the band whose group delay is optimised and
+	// measured. It is zero outside that band.
 	DelayWeight []float64
+
+	// MagnitudeWeight rises with the inverse target magnitude, so a design
+	// minimising an absolute complex error still has to respect stopband
+	// depth. It is positive everywhere, because a zero weight leaves its bin
+	// genuinely unconstrained.
+	MagnitudeWeight []float64
 }
 
 // Row is one method/target result in the committed reference CSV.

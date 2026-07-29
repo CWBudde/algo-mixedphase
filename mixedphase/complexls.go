@@ -35,12 +35,20 @@ func DesignComplexLeastSquares(
 	prototype []float64,
 	cfg ComplexLeastSquaresConfig,
 ) (Result, error) {
-	if len(prototype) == 0 {
-		return Result{}, ErrEmptyPrototype
+	if err := validatePrototype(prototype); err != nil {
+		return Result{}, err
+	}
+
+	if err := validateFinite("mix", cfg.Mix); err != nil {
+		return Result{}, err
 	}
 
 	if cfg.Mix < 0 || cfg.Mix > 1 {
 		return Result{}, ErrInvalidPhaseMix
+	}
+
+	if err := validateFinite("epsilon", cfg.Epsilon); err != nil {
+		return Result{}, err
 	}
 
 	if cfg.Epsilon < 0 {
@@ -91,7 +99,7 @@ func DesignComplexLeastSquares(
 	targetMagnitude := magnitude(targetSpectrum)
 	epsilon := defaultEpsilon(targetMagnitude, cfg.Epsilon)
 
-	minimumSpectrum, err := minimumPhaseSpectrum(
+	_, minimumPhase, err := minimumPhaseSpectrum(
 		w,
 		targetMagnitude,
 		epsilon,
@@ -104,7 +112,7 @@ func DesignComplexLeastSquares(
 	desired := prescribedResponse(
 		w,
 		targetMagnitude,
-		minimumSpectrum,
+		minimumPhase,
 		cfg.Mix,
 		float64(length-1)/2,
 	)

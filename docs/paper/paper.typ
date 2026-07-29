@@ -65,7 +65,7 @@ fixed-support accounting, numerical conditioning, deterministic stopping,
 competing methods, failure cases, and the reproducibility apparatus are later
 additions developed in the companion repository.
 
-== Historical scope and revision boundary
+== Historical scope and revision boundary <revision-boundary>
 
 The 2012 contribution consists of four ideas:
 
@@ -143,9 +143,12 @@ tap count.
   signal-flow-diagram(),
   caption: [
     Signal-flow comparison redrawn in the simple block style of the original
-    paper's Figures 2 and 3 @budde2012. The 2012 construction replaces the
-    motivating minimum-phase IIR bank with the finite minimum-phase factor
-    $a[n]$ and cascades it with the linear-phase factor $b[n]$. The two FIR
+    paper's Figures 2 and 3 @budde2012. The upper structure is not Budde's: it
+    is the mixed FIR/IIR arrangement of Goertz, Kleber, Makarski and Thaden
+    @goertz2011, which @budde2012 reproduces as its Figure 2 in order to
+    motivate the departure from it. The 2012 construction replaces that
+    minimum-phase IIR bank with the finite minimum-phase factor $a[n]$ and
+    cascades it with the linear-phase factor $b[n]$. The two FIR
     blocks may be convolved into the single mixed-phase response $h[n]$ that
     runs.
   ],
@@ -197,8 +200,9 @@ filter.
 
 = The 2012 alternating construction <alternating-construction>
 
-The following is a faithful English restatement of the algorithm in
-@budde2012, with notation normalised to the present paper:
+The following restates the implemented algorithm in English, with notation
+normalised to the present paper. It follows @budde2012 step for step except
+where noted after the list:
 
 1. Transform the prototype and retain its target magnitude $M$.
 2. Reconstruct a dense minimum-phase spectrum from $M$.
@@ -209,6 +213,14 @@ The following is a faithful English restatement of the algorithm in
 6. Convolve the two factors to obtain the mixed-phase response.
 7. Return to the residual step, alternately dividing by $b$ and $a$, so each
   factor compensates the windowing influence of the other.
+
+Two statements of the original are deliberately absent above, because neither
+is implemented here. Step 6 of @budde2012 offers forcing *minimum* phase as an
+alternative to forcing zero phase, and the sentence immediately following its
+step list then requires one of the two factors to be reversed in time, which
+yields a minimum/maximum-phase split rather than the minimum/linear-phase split
+used throughout this paper. Both belong to the extensions listed in
+@revision-boundary and neither was evaluated.
 
 Truncation is not a neutral operation: it convolves the response with the
 spectrum of the selected window. The quotient in the next half-pass asks one
@@ -256,7 +268,9 @@ controls are intentionally distinct.
 
 The implementation provides two equivalent dense-grid reconstructions:
 
-- a real-cepstrum method that folds the cepstrum onto its causal half; and
+- a real-cepstrum method that folds the cepstrum onto its causal half, the
+  classical construction of Oppenheim and Schafer @oppenheim1989 that
+  @budde2012 cites for this step; and
 - a discrete-Hilbert method that derives phase from log magnitude, following
   Damera-Venkata, Evans, and McCaslin @damera2000.
 
@@ -294,8 +308,10 @@ budgets.
 Phase interpolation constructs a target whose unwrapped phase moves between
 the minimum- and linear-phase endpoints and then projects its inverse transform
 onto the finite support. Weighted complex least squares approximates the same
-target directly in coefficient space; Lawson reweighting trades RMS complex
-error for a lower peak error.
+target directly in coefficient space; Lawson reweighting @lawson1961 trades RMS
+complex error for a lower peak error. That reweighting is multiplicative and
+converges towards its own equilibrium, so a supplied weight has little influence
+left after many passes.
 
 Zero-weight bins are genuinely unconstrained. They can diverge even when the
 weighted band is fitted accurately, so weak weights are safer than removing
@@ -324,9 +340,28 @@ not part of the general mixed-phase API.
 
 The 2012 paper contains illustrative response and signal-flow figures but no
 machine-readable result set. The present revision's common benchmark suite
-evaluates low-pass, parametric-EQ, crossover, deep-notch, and measured
-room-correction targets. Each method receives the same target samples,
-frequency weights, tap budget, and applicable delay or magnitude constraint.
+evaluates low-pass, parametric-EQ, crossover, deep-notch, measured
+room-correction, and steep-crossover targets. Each method receives the same
+target samples, frequency weights, tap budget, and applicable delay or
+magnitude constraint.
+
+The first five are smooth curves whose minimum-phase factor fits inside the
+$N_A$ taps the split allocates to it. That has a consequence which must be
+stated before any of their numbers are read: when the minimum-phase factor
+alone already reproduces the target, the residual quotient is unit-magnitude,
+its zero-phase inverse transform is a unit impulse, and the alternating
+correction converges to the identity. The construction then degenerates to
+$z^(-d)$ times a minimum-phase filter, and the reported magnitude error
+describes the reconstruction rather than the factorisation. On all five the
+linear factor carries no measurable energy away from its centre tap.
+
+The steep-crossover target — an eighth-order crossover at 800 Hz — is included
+precisely because it does not fit. Its linear factor carries 92.4% of its
+energy off centre and the correction loop accepts five passes, so it is the
+only target in the suite on which the alternating construction is doing the
+work the method claims. The minphase-truncation method, which is the same
+design with the delay budget set to zero, is included for the same reason: it
+is the baseline that separates the factorisation from the reconstruction.
 
 The reported response is always recomputed from the realised taps. The suite
 records:

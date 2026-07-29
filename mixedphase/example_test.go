@@ -50,24 +50,44 @@ func ExampleDesignComplexLeastSquares() {
 		}
 	}
 
-	result, err := mixedphase.DesignComplexLeastSquares(
-		prototype,
-		mixedphase.ComplexLeastSquaresConfig{
-			Length:            9,
-			Mix:               0.5,
-			FFTSize:           256,
-			Weight:            weight,
-			MinimaxIterations: 8,
-		},
-	)
-	if err != nil {
-		panic(err)
+	// Mix is deliberately not 0.5: interpolating exactly half way between
+	// minimum and linear phase flips half of this prototype's reciprocal zero
+	// pairs, so the prescribed response is itself a nine-tap filter and the fit
+	// is exact to rounding. Both error norms would then be pure noise and any
+	// comparison between them meaningless.
+	design := func(passes int) mixedphase.Result {
+		result, err := mixedphase.DesignComplexLeastSquares(
+			prototype,
+			mixedphase.ComplexLeastSquaresConfig{
+				Length:            9,
+				Mix:               0.25,
+				FFTSize:           256,
+				Weight:            weight,
+				MinimaxIterations: passes,
+			},
+		)
+		if err != nil {
+			panic(err)
+		}
+
+		return result
 	}
 
-	fmt.Println(len(result.Taps))
-	fmt.Println(result.ComplexError.Peak < result.ComplexError.RMS*3)
+	leastSquares := design(0)
+	minimax := design(8)
+
+	fmt.Println(len(minimax.Taps))
+
+	// Lawson reweighting lowers the peak error it is aimed at ...
+	fmt.Println(minimax.ComplexError.Peak < leastSquares.ComplexError.Peak)
+
+	// ... by levelling the error towards equiripple, so peak approaches RMS.
+	fmt.Println(minimax.ComplexError.Peak/minimax.ComplexError.RMS < 1.1)
+	fmt.Println(leastSquares.ComplexError.Peak/leastSquares.ComplexError.RMS > 1.5)
 	// Output:
 	// 9
+	// true
+	// true
 	// true
 }
 

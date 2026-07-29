@@ -253,9 +253,16 @@ func phaseDelay(row Row) string {
 }
 
 func methodDelay(method string, delay int) string {
-	if method == "low-group-delay" {
+	switch method {
+	// low-group-delay optimises delay instead of honouring a budget, so it has
+	// no prescribed delay to report.
+	case "low-group-delay":
 		return ""
+	// minphase-truncation is the same design with the budget removed, so
+	// reporting the suite's budget for it would be a lie.
+	case "minphase-truncation":
+		return "0"
+	default:
+		return strconv.Itoa(delay)
 	}
-
-	return strconv.Itoa(delay)
 }

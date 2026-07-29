@@ -134,8 +134,16 @@ func newLowDelayProblem(
 	prototype []float64,
 	cfg LowGroupDelayConfig,
 ) (*lowDelayProblem, []float64, error) {
-	if len(prototype) == 0 {
-		return nil, nil, ErrEmptyPrototype
+	if err := validatePrototype(prototype); err != nil {
+		return nil, nil, err
+	}
+
+	if err := validateFiniteFields(
+		field{"epsilon", cfg.Epsilon},
+		field{"tolerance", cfg.ToleranceDB},
+		field{"initial penalty", cfg.InitialPenalty},
+	); err != nil {
+		return nil, nil, err
 	}
 
 	if cfg.Epsilon < 0 {
@@ -335,7 +343,7 @@ func lowDelayStart(
 
 	epsilon := defaultEpsilon(targetMagnitude, cfg.Epsilon)
 
-	minimumSpectrum, err := minimumPhaseSpectrum(
+	minimumSpectrum, _, err := minimumPhaseSpectrum(
 		w,
 		targetMagnitude,
 		epsilon,

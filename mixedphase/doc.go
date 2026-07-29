@@ -46,11 +46,20 @@
 //
 // Both objectives measure the absolute complex deviation, not a relative one.
 // Where the prescribed response is small the absolute error is small too, so an
-// unweighted minimax design spends its budget on the passband and lets stopband
-// accuracy slip: on the low-pass in the mixedphase example the reweighting
-// halves the peak complex error while the dB magnitude error rises from about
-// 36 dB to about 60 dB. Supply a weight that rises with the inverse target
-// magnitude when stopband depth matters.
+// unweighted design spends its budget on the passband and lets stopband
+// accuracy slip. Supplying a weight that rises with the inverse target
+// magnitude is the fix, and on the reference suite it is worth several times
+// the dB error: on the crossover target a plain least-squares fit improves from
+// 3.616 dB RMS to 0.568 dB, and on the deep notch from 3.083 dB to 1.048 dB
+// (129 taps, a 1024-point grid, weight capped at 60 dB of range).
+//
+// That gain applies to the least-squares solution. Lawson reweighting is
+// multiplicative and converges towards its own equilibrium, so after enough
+// passes the supplied weight has almost no influence left: at sixteen passes
+// the same two designs land within a thousandth of a dB of their unweighted
+// counterparts. Weight the least-squares solution, or reweight towards the
+// minimax one, but do not expect the weight to survive many passes of the
+// latter.
 //
 // # Optimised delay: what the local search can and cannot do
 //
@@ -58,10 +67,12 @@
 // behaves like one. Three properties are worth knowing before relying on it.
 //
 // It does improve on a truncated minimum-phase design, which is the usual
-// answer when low delay is wanted. On the 65-tap low-pass used by the
-// mixedphase example the mean passband group delay falls from about 12.70
-// samples to 12.62 within a 1 dB tolerance and to 12.08 within 6 dB, and the
-// peak passband delay falls from 23.58 to 22.72 and 21.18 respectively. The
+// answer when low delay is wanted. On a 65-tap Hann-windowed low-pass at
+// cutoff 0.08, designed on a 1024-point grid with 200 iterations per penalty
+// stage, the mean passband group delay falls from 12.70 samples to 12.62 within
+// a 1 dB tolerance and to 12.08 within 6 dB, and the peak passband delay falls
+// from 23.58 to 22.72 and 21.18 respectively
+// (TestLowGroupDelayQuotedImprovement). The
 // gain is real but modest: minimum phase is already close to delay-optimal for
 // a fixed magnitude, and the room the optimiser has is exactly the room the
 // tolerance grants it.
@@ -100,6 +111,47 @@
 // threshold. Comparisons should state the evaluated frequency band and weight;
 // an unmasked stopband group-delay curve is not evidence for or against a
 // design.
+//
+// # When the alternating factorisation has nothing to do
+//
+// This is the first thing to check before reading anything into a
+// [DesignIterative] result, and it is easy to miss because it fails silently
+// and flatteringly.
+//
+// The split gives the minimum-phase factor Length-2*Delay taps. If the target's
+// minimum-phase impulse response already fits in those taps, the factor alone
+// reproduces the target, the residual quotient is unit-magnitude, and the
+// zero-phase inverse transform of a flat magnitude is a unit impulse. The
+// linear-phase factor converges to that impulse, the correction loop becomes a
+// fixed point at the identity, and the design reduces to
+//
+//	h[n] = z^-Delay * minimum-phase(target)
+//
+// which is a delayed minimum-phase filter — a filter the method did not shape,
+// carrying the delay without buying anything for it. The reported magnitude
+// error is excellent, because minimum phase reproduces the magnitude; nothing
+// in the metrics reveals that the factorisation was inert.
+//
+// Five of the six reference targets in internal/reference are in exactly this
+// regime: their linear factor carries 0.000000 of its energy away from the
+// centre tap. The steep-crossover target — an eighth-order crossover at 800 Hz,
+// whose minimum-phase response does not fit the budget — carries 0.923977, and
+// is the only one that exercises the method.
+//
+// The consequence for a caller is a rule of thumb: the alternating
+// factorisation is worth reaching for when the target is too long or too steep
+// for the minimum-phase factor's share of the taps. When it is not, the honest
+// comparison is against Delay zero, which is the same design with the budget
+// removed and is usually better on every axis.
+//
+// Where the factor is genuinely starved, the method earns its delay. On
+// steep-crossover at 129 taps and delay 16 it reaches 6.901 dB RMS magnitude
+// error, against 54.483 dB for phase interpolation, 54.934 dB for
+// minimum-phase truncation and 42.838 dB for the low-delay optimiser, at a
+// comparable mean group delay. It gives up linear-magnitude accuracy to get
+// there (2.509% against 1.227% for minimum-phase truncation) and it has the
+// worst group-delay ripple of the fixed-delay methods. Those trade-offs are
+// visible in every row of docs/reference-results.csv.
 //
 // # Conditioning of the alternating factorisation
 //
@@ -144,4 +196,38 @@
 // then converge to designs whose errors differ by a few dB in either direction,
 // with neither systematically ahead. Runtime and allocations are equivalent —
 // both perform one inverse and one forward transform per reconstruction.
+//
+// # What the reconstruction does not guarantee
+//
+// Two limitations are worth stating plainly, because neither is visible in the
+// returned error and both are easy to assume away.
+//
+// The grid is oversampled but not converged. A zero FFTSize selects a power of
+// two at least eight times the prototype length, which bounds time-domain
+// aliasing without eliminating it, and the residual does not shrink as
+// prototypes grow — eight times a longer prototype is still eight times. The
+// budget a caller accepts by leaving FFTSize at zero is measured by
+// TestMinimumPhaseAliasingBudget: about 0.4% of peak for a 33-tap low-pass,
+// about 0.9% for a 129-tap one, and 41% for a two-tap prototype, where the
+// 16-point floor applies. Raise FFTSize when that matters;
+// TestMinimumPhaseAliasingShrinksWithTheGrid pins that it helps monotonically.
+//
+// The result is minimum phase only up to truncation. The dense reconstruction
+// is minimum phase, but it is then cut to the prototype length, and truncation
+// can push zeros just outside the unit circle. The practical consequence is
+// that the result is not safe to invert: for a 63-tap low-pass on a 512-point
+// grid the inverse recursion diverges outright, and reaches 4.3e5 at 8192 and
+// 1.2e5 at 131072 (TestMinimumPhaseInverseStability). Use it as a factor, not
+// as something to divide by.
+//
+// # Weighted least squares: the ridge is silent
+//
+// [DesignComplexLeastSquares] solves weighted normal equations by Cholesky
+// factorisation, and retries with diagonal loadings of 0, 1e-12, 1e-9, 1e-6 and
+// 1e-3 relative until one succeeds. The ladder is what keeps wide zero-weight
+// bands from returning [ErrSingularSystem], but a loading at the top of it
+// changes the returned filter materially, and [Result] does not report which
+// rung was used. A design that looks unexpectedly smooth in an unweighted band
+// is the symptom. Weighting bands down rather than out avoids the situation
+// entirely.
 package mixedphase

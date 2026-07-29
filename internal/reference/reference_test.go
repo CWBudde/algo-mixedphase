@@ -24,6 +24,7 @@ func TestTargetsShareFixedBudgets(t *testing.T) {
 		"crossover",
 		"deep-notch",
 		"room-correction",
+		"steep-crossover",
 	}
 	if len(targets) != len(wantNames) {
 		t.Fatalf("len(Targets()) = %d, want %d", len(targets), len(wantNames))
@@ -79,9 +80,16 @@ func TestRunCoversEveryMethodAndMetric(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	const methodCount = 4
-	if len(rows) != 5*methodCount {
-		t.Fatalf("len(Run()) = %d, want %d", len(rows), 5*methodCount)
+	targets, err := Targets()
+	if err != nil {
+		t.Fatalf("Targets() error = %v", err)
+	}
+
+	const methodCount = 5
+
+	wantRows := len(targets) * methodCount
+	if len(rows) != wantRows {
+		t.Fatalf("len(Run()) = %d, want %d", len(rows), wantRows)
 	}
 
 	for _, row := range rows {
@@ -180,7 +188,7 @@ func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
 		t.Fatalf("RepresentativeResponses() error = %v", err)
 	}
 
-	const methodCount = 4
+	const methodCount = 5
 	if len(frequencyRows) != methodCount*(FFTSize/2+1) {
 		t.Fatalf(
 			"frequency row count = %d, want %d",
@@ -263,9 +271,12 @@ func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
 
 		if row.Method == "budde-iterative" {
 			energy := row.Coefficient * row.Coefficient
+
 			iterativeEnergy += energy
+
 			if row.PeakAlignedIndex < 0 {
 				iterativePrePeakEnergy += energy
+
 				if math.Abs(row.NormalisedCoefficient) >= 0.01 {
 					iterativeSignificantPrePeakSamples++
 				}

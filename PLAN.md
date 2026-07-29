@@ -185,7 +185,11 @@ Exit criteria:
 - [x] A clean checkout with the documented pinned toolchain builds the English PDF with
       `just paper`, with no manually prepared figures or tables.
 - [x] Every quantitative claim is traceable to a test or `just compare` artifact and states
-      the exact design and optimiser budget that produced it.
+      the exact design and optimiser budget that produced it. (Re-audited: the
+      low-group-delay figures, the delay sweep and the graphiceq zigzag figures were
+      quoted without a test or a budget, and one named fixture did not exist. Pinned by
+      `TestLowGroupDelayQuotedImprovement`, `TestIterativeDelaySweep` and
+      `TestZigzagPeakErrorsBySplit`.)
 - [x] Technically review the revised paper against the German original, the Go
       implementation, and the committed benchmark data.
 - [ ] After the Phase 6 version tag exists, verify that its CI-built PDF is downloadable

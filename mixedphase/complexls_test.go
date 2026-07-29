@@ -377,7 +377,7 @@ func peakInWeightedBand(
 
 	targetMagnitude := magnitude(targetSpectrum)
 
-	minimumSpectrum, err := minimumPhaseSpectrum(
+	_, minimumPhase, err := minimumPhaseSpectrum(
 		w,
 		targetMagnitude,
 		defaultEpsilon(targetMagnitude, 0),
@@ -390,7 +390,7 @@ func peakInWeightedBand(
 	desired := prescribedResponse(
 		w,
 		targetMagnitude,
-		minimumSpectrum,
+		minimumPhase,
 		0.3,
 		float64(len(taps)-1)/2,
 	)

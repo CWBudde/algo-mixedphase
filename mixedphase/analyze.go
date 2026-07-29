@@ -11,12 +11,19 @@ import (
 //
 // fftSize may be zero to select a dense grid automatically.
 func Analyze(reference, candidate []float64, fftSize int) (Metrics, error) {
-	if len(reference) == 0 {
-		return Metrics{}, ErrEmptyPrototype
+	if err := validatePrototype(reference); err != nil {
+		return Metrics{}, fmt.Errorf("mixedphase: reference: %w", err)
 	}
 
+	// An empty candidate keeps reporting ErrInvalidLength rather than the
+	// arguably better ErrEmptyPrototype: callers match on it, and swapping a
+	// public sentinel is not worth the break.
 	if len(candidate) == 0 {
 		return Metrics{}, ErrInvalidLength
+	}
+
+	if err := validatePrototype(candidate); err != nil {
+		return Metrics{}, fmt.Errorf("mixedphase: candidate: %w", err)
 	}
 
 	size, err := nextDesignFFTSize(max(len(reference), len(candidate)), fftSize)

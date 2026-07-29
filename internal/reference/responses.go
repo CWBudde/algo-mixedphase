@@ -151,6 +151,17 @@ func realSpectrum(
 	plan *algofft.Plan[complex128],
 	values []float64,
 ) ([]complex128, error) {
+	// Zero-padding only makes sense while the signal fits the grid. Truncating
+	// silently would misreport the response of exactly the long filters the
+	// suite is meant to measure, so refuse instead.
+	if len(values) > FFTSize {
+		return nil, fmt.Errorf(
+			"reference: %d samples do not fit the %d-point grid",
+			len(values),
+			FFTSize,
+		)
+	}
+
 	input := make([]complex128, FFTSize)
 	for index, value := range values {
 		input[index] = complex(value, 0)

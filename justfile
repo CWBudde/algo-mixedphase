@@ -30,6 +30,13 @@ check-tidy:
     go mod tidy
     git diff --exit-code go.mod go.sum
 
+# Build every package for the host platform
+#
+# `go test` links its own main, so a package that fails to build as a command
+# still passes the test suite. This recipe is what catches that.
+build:
+    go build ./...
+
 # Run all tests
 test:
     go test -v ./...
@@ -52,7 +59,11 @@ test-coverage:
     go test -v -coverprofile=coverage.out ./...
     go tool cover -html=coverage.out -o coverage.html
 
-# Enforce the AGENTS.md coverage floor on the two public packages
+# Enforce the AGENTS.md coverage floor
+#
+# internal/reference is gated alongside the two public packages: it produces
+# every number quoted in docs/ and in the paper, so leaving it ungated would
+# exempt exactly the code the reproducibility rules exist to protect.
 check-coverage:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -60,8 +71,8 @@ check-coverage:
     status=0
     workdir="$(mktemp -d)"
     trap 'rm -rf "$workdir"' EXIT
-    for pkg in mixedphase graphiceq; do
-        profile="${workdir}/${pkg}.out"
+    for pkg in mixedphase graphiceq internal/reference; do
+        profile="${workdir}/${pkg//\//-}.out"
         go test "./${pkg}/" -coverprofile="$profile" >/dev/null
         percent="$(go tool cover -func="$profile" | awk '/^total:/ {print $3}' | tr -d '%')"
         if awk "BEGIN{exit !($percent < $floor)}"; then
@@ -136,7 +147,7 @@ paper-refresh:
     just paper
 
 # Run all checks (formatting, linting, tests, tidiness, reproducibility)
-ci: check-formatted test test-cross-build test-web lint check-tidy check-coverage compare-check
+ci: check-formatted build test test-cross-build test-web lint check-tidy check-coverage compare-check
 
 # Clean build artifacts
 clean:

@@ -21,11 +21,20 @@ const (
 //	linear length  = 2*Delay + 1
 //	minimum length = Length - linear length + 1
 //
-// Each pass redesigns one factor from the regularised spectral quotient of the
-// target and the other factor, then truncates/windows it back to its support.
+// Each pass redesigns both factors in turn: first the minimum-phase factor from
+// the regularised spectral quotient of the target and the current linear-phase
+// factor, then the linear-phase factor from the quotient of the target and the
+// freshly designed minimum-phase factor. Each is truncated and windowed back to
+// its own support before the next quotient is formed, so the alternation is
+// what lets one factor absorb the other's windowing error.
+//
+// Two delays short-circuit the alternation because one factor degenerates: a
+// Delay of zero reduces the design to a truncated minimum-phase filter, and the
+// largest admissible Delay leaves the minimum-phase factor a single tap and
+// reduces it to a linear-phase filter. Both return with Iterations zero.
 func DesignIterative(prototype []float64, cfg IterativeConfig) (Result, error) {
-	if len(prototype) == 0 {
-		return Result{}, ErrEmptyPrototype
+	if err := validatePrototype(prototype); err != nil {
+		return Result{}, err
 	}
 
 	length := cfg.Length
@@ -35,6 +44,14 @@ func DesignIterative(prototype []float64, cfg IterativeConfig) (Result, error) {
 
 	if length <= 0 {
 		return Result{}, ErrInvalidLength
+	}
+
+	if err := validateFiniteFields(
+		field{"epsilon", cfg.Epsilon},
+		field{"window alpha", cfg.WindowAlpha},
+		field{"tolerance", cfg.ToleranceDB},
+	); err != nil {
+		return Result{}, err
 	}
 
 	if cfg.Epsilon < 0 {
@@ -289,7 +306,7 @@ func designMinimumPart(
 	epsilon float64,
 	cfg IterativeConfig,
 ) ([]float64, error) {
-	spectrum, err := minimumPhaseSpectrum(
+	spectrum, _, err := minimumPhaseSpectrum(
 		w,
 		targetMagnitude,
 		epsilon,

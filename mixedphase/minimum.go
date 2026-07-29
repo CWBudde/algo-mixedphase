@@ -23,8 +23,12 @@ func MinimumPhaseWith(
 	prototype []float64,
 	cfg MinimumPhaseConfig,
 ) ([]float64, error) {
-	if len(prototype) == 0 {
-		return nil, ErrEmptyPrototype
+	if err := validatePrototype(prototype); err != nil {
+		return nil, err
+	}
+
+	if err := validateFinite("epsilon", cfg.Epsilon); err != nil {
+		return nil, err
 	}
 
 	if cfg.Epsilon < 0 {
@@ -53,7 +57,7 @@ func MinimumPhaseWith(
 	targetMagnitude := magnitude(targetSpectrum)
 	epsilon := defaultEpsilon(targetMagnitude, cfg.Epsilon)
 
-	minimumSpectrum, err := minimumPhaseSpectrum(
+	minimumSpectrum, _, err := minimumPhaseSpectrum(
 		w,
 		targetMagnitude,
 		epsilon,

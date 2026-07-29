@@ -29,7 +29,11 @@ type roomPoint struct {
 	response  float64
 }
 
-// Targets constructs the five fixed Phase 3 reference targets.
+// Targets constructs the fixed reference targets.
+//
+// The first five are smooth curves whose minimum-phase factor fits comfortably
+// inside the tap budget. steep-crossover does not, and that is the point of
+// including it: see its definition below.
 func Targets() ([]Target, error) {
 	roomPoints, err := parseRoomResponse(roomResponseCSV)
 	if err != nil {
@@ -76,6 +80,28 @@ func Targets() ([]Target, error) {
 				return frequency >= 20 && frequency <= 20000
 			},
 		},
+		// steep-crossover is the one target that starves the minimum-phase
+		// factor.
+		//
+		// The five curves above are smooth enough that a minimum-phase filter
+		// reproduces them inside the Length-2*Delay taps the split leaves it.
+		// When that happens the residual quotient is unit-magnitude, its
+		// zero-phase inverse transform is a unit impulse, and the alternating
+		// correction has nothing to do: the design degenerates to a delayed
+		// minimum-phase filter and every reported number describes a filter the
+		// method never shaped.
+		//
+		// An eighth-order crossover at 800 Hz has a minimum-phase impulse
+		// response longer than that budget, so the linear factor has to carry
+		// real shaping. It is the only target here that exercises the method
+		// the repository exists to evaluate.
+		{
+			name:  "steep-crossover",
+			curve: linkwitzRileyOrder(800, 8),
+			delayBand: func(frequency float64) bool {
+				return frequency <= 600
+			},
+		},
 	}
 
 	targets := make([]Target, 0, len(definitions))
@@ -96,6 +122,7 @@ func Targets() ([]Target, error) {
 				definition.curve,
 				definition.delayBand,
 			),
+			MagnitudeWeight: buildMagnitudeWeight(definition.curve),
 		})
 	}
 
@@ -128,10 +155,19 @@ func parametricEQ(
 }
 
 func linkwitzRileyLowPass(cutoff float64) magnitudeCurve {
+	return linkwitzRileyOrder(cutoff, 4)
+}
+
+// linkwitzRileyOrder generalises the crossover magnitude to any even order.
+//
+// The order controls how long the corresponding minimum-phase impulse response
+// is, which is the property that decides whether a fixed tap budget can hold
+// it.
+func linkwitzRileyOrder(cutoff float64, order int) magnitudeCurve {
 	return func(frequency float64) float64 {
 		ratio := frequency / cutoff
 
-		return 1 / (1 + math.Pow(ratio, 4))
+		return 1 / (1 + math.Pow(ratio, float64(order)))
 	}
 }
 
@@ -161,6 +197,14 @@ func roomCorrection(points []roomPoint) magnitudeCurve {
 	}
 }
 
+// buildPrototype samples a zero-phase magnitude curve, transforms it, and
+// windows the result to the fixed prototype length.
+//
+// Every target here is zero-phase. That is a deliberate limitation rather than
+// an oversight: none of the compared designs fits a prescribed excess phase —
+// each one synthesises phase from the magnitude alone — so a target carrying
+// excess phase would produce identical rows for every method and measure
+// nothing. See the failure-mode notes in the package docs.
 func buildPrototype(curve magnitudeCurve) ([]float64, error) {
 	plan, err := algofft.NewPlan64(targetFFTSize)
 	if err != nil {
@@ -168,6 +212,7 @@ func buildPrototype(curve magnitudeCurve) ([]float64, error) {
 	}
 
 	spectrum := make([]complex128, targetFFTSize)
+
 	for bin := range targetFFTSize/2 + 1 {
 		frequency := float64(bin) * SampleRate / targetFFTSize
 		spectrum[bin] = complex(curve(frequency), 0)
@@ -229,6 +274,44 @@ func buildDelayWeight(
 			magnitude := curve(frequency)
 			weight[bin] = magnitude * magnitude
 		}
+	}
+
+	return weight
+}
+
+// magnitudeWeightFloor bounds how much a deep stopband can be emphasised.
+//
+// The weight is the reciprocal of the target magnitude, so a 60 dB notch would
+// otherwise be weighted a thousand times more heavily than the passband and the
+// design would spend everything on a band nobody hears. Flooring the magnitude
+// at 1e-3 of its peak caps the ratio at 60 dB.
+const magnitudeWeightFloor = 1e-3
+
+// buildMagnitudeWeight weights each bin by the inverse target magnitude.
+//
+// This is the weighting the mixedphase package documents for an absolute
+// complex objective: without it, a design minimising |H_wanted - H| treats an
+// error in a -60 dB stopband as a thousand times less important than the same
+// absolute error in the passband, and the stopband collapses.
+func buildMagnitudeWeight(curve magnitudeCurve) []float64 {
+	weight := make([]float64, FFTSize/2+1)
+
+	peak := 0.0
+	for bin := range weight {
+		peak = max(peak, curve(float64(bin)*SampleRate/FFTSize))
+	}
+
+	if peak == 0 {
+		for bin := range weight {
+			weight[bin] = 1
+		}
+
+		return weight
+	}
+
+	for bin := range weight {
+		magnitude := curve(float64(bin) * SampleRate / FFTSize)
+		weight[bin] = peak / max(magnitude, magnitudeWeightFloor*peak)
 	}
 
 	return weight

@@ -103,9 +103,9 @@ The delay-sweep regression uses a maximum budget of 12 passes and the default
 |    64 |               0 |              0.001575002 | 21.639157 |
 
 The zero- and maximum-delay endpoints need no alternating correction.
-`TestIterativeCrossBuildDeterminism` pins these metrics and
-`scripts/test-cross-build.sh` runs the delay-8 golden case in both native and
-`GOOS=js GOARCH=wasm` builds.
+`TestIterativeDelaySweep` pins every row above; `TestIterativeCrossBuildDeterminism`
+pins the delay-8 row in more detail, and `scripts/test-cross-build.sh` runs both it
+and `TestIterativeConditioning` in native and `GOOS=js GOARCH=wasm` builds.
 
 ## Established alternatives
 
@@ -229,15 +229,18 @@ Measured on ten octave bands from 31.25 Hz at 48 kHz with the gains
 | 4         | 193  | 96      | 0.068 dB  | 0.914 dB   |
 
 The first row is the all-FIR reference, so the paper's 50% latency reduction is
-reproduced at an unchanged peak error, and it keeps working for several further
-bands. Against an all-FIR design cut to the same tap count the hybrid is three
-to five times more accurate in RMS and two to five times in peak error
-throughout, which is what makes the split worth taking.
+reproduced while the peak error moves only from 0.580 dB to 0.603 dB, and it keeps
+working for several further bands. Against an all-FIR design cut to the same tap
+count the hybrid is three to five times more accurate in RMS and roughly two to six
+times in peak error (1.85x at one offloaded band, 5.78x at three), which is what
+makes the split worth taking.
 
 Two limits are worth stating with it. The shelves step monotonically between
 neighbouring band gains, so a target alternating between +12 and -12 dB per
-octave breaks the method: the peak error is 3.6 dB for the all-FIR design and
-19.6 dB with two bands offloaded. And the shelf gains are taken directly from
+octave breaks the method: the peak error is 3.60 dB for the all-FIR design, 4.00 dB
+with one band offloaded and 19.58 dB with two, pinned by `TestZigzagPeakErrorsBySplit`.
+Degradation is not monotone in the split — three bands recovers to 10.56 dB — so the
+band count is not a quality dial here. And the shelf gains are taken directly from
 the requested gain differences without an interaction solve, which is adequate
 for the few bands measured here and would not be for a deeper split.
 
@@ -319,46 +322,73 @@ are not reproducible across machines.
 
 <!-- reference-results:start -->
 
-| Target          | Method              | Rel. error | Mean delay | Pre-peak |
-| :-------------- | :------------------ | ---------: | ---------: | -------: |
-| low-pass        | Budde iterative     |   0.00010% |      21.86 |   17.74% |
-|                 | phase interpolation |   0.22262% |      20.40 |    1.74% |
-|                 | complex minimax     |   0.40294% |      20.39 |    1.74% |
-|                 | low group delay     |  22.79885% |       1.76 |   24.37% |
-| parametric EQ   | Budde iterative     |   0.07904% |      22.21 |    0.00% |
-|                 | phase interpolation |   1.35975% |      20.94 |    0.16% |
-|                 | complex minimax     |   2.58983% |      20.79 |    0.31% |
-|                 | low group delay     |  21.59908% |       1.93 |    0.00% |
-| crossover       | Budde iterative     |   0.00001% |      26.41 |   44.77% |
-|                 | phase interpolation |   0.07248% |      23.81 |   39.34% |
-|                 | complex minimax     |   0.09716% |      23.81 |   39.35% |
-|                 | low group delay     |   7.11710% |       9.73 |   35.27% |
-| deep notch      | Budde iterative     |   0.14710% |      25.19 |    0.01% |
-|                 | phase interpolation |   0.62083% |      22.55 |    0.00% |
-|                 | complex minimax     |   1.03374% |      22.50 |    0.02% |
-|                 | low group delay     |   3.53804% |       6.67 |    0.00% |
-| room correction | Budde iterative     |   0.13143% |      16.50 |    0.00% |
-|                 | phase interpolation |   0.28140% |      16.38 |    0.06% |
-|                 | complex minimax     |   0.67989% |      16.38 |    0.06% |
-|                 | low group delay     |   8.63192% |       0.10 |    0.00% |
+| Target          | Method                   | Rel. error | RMS dB | Mean delay | Delay ripple | Pre-peak |
+| :-------------- | :----------------------- | ---------: | -----: | ---------: | -----------: | -------: |
+| low-pass        | Budde iterative          |   0.00010% |  0.000 |      21.86 |        1.117 |   17.74% |
+|                 | phase interpolation      |   0.22262% |  0.026 |      20.40 |        0.889 |    1.74% |
+|                 | complex minimax          |   0.40295% |  0.123 |      20.39 |        0.873 |    1.74% |
+|                 | minimum-phase truncation |   0.00000% |  0.000 |       5.86 |        1.117 |   17.74% |
+|                 | low group delay          |  22.79885% |  1.898 |       1.76 |        6.676 |   24.37% |
+| parametric EQ   | Budde iterative          |   0.07904% |  0.006 |      22.21 |        6.994 |    0.00% |
+|                 | phase interpolation      |   1.35975% |  0.100 |      20.94 |        5.835 |    0.16% |
+|                 | complex minimax          |   2.58974% |  0.240 |      20.79 |        5.642 |    0.31% |
+|                 | minimum-phase truncation |   0.00428% |  0.000 |       6.21 |        6.996 |    0.00% |
+|                 | low group delay          |  21.59908% |  1.708 |       1.93 |        7.595 |    0.00% |
+| crossover       | Budde iterative          |   0.00001% |  0.001 |      26.41 |        0.766 |   44.77% |
+|                 | phase interpolation      |   0.07248% |  3.616 |      23.81 |        0.582 |   39.34% |
+|                 | complex minimax          |   0.09716% |  7.194 |      23.81 |        0.580 |   39.35% |
+|                 | minimum-phase truncation |   0.00000% |  0.000 |      10.41 |        0.766 |   44.77% |
+|                 | low group delay          |   7.11710% |  6.115 |       9.73 |        2.906 |   35.27% |
+| deep notch      | Budde iterative          |   0.14710% |  0.739 |      25.19 |        5.812 |    0.01% |
+|                 | phase interpolation      |   0.62083% |  3.083 |      22.55 |        4.673 |    0.00% |
+|                 | complex minimax          |   0.99023% |  2.547 |      22.51 |        4.787 |    0.02% |
+|                 | minimum-phase truncation |   0.00719% |  0.084 |       8.63 |        5.969 |    0.00% |
+|                 | low group delay          |   3.53804% |  0.514 |       6.67 |        7.182 |    0.00% |
+| room correction | Budde iterative          |   0.13143% |  0.080 |      16.50 |        1.227 |    0.00% |
+|                 | phase interpolation      |   0.28140% |  0.117 |      16.38 |        0.984 |    0.06% |
+|                 | complex minimax          |   0.70134% |  0.130 |      16.38 |        1.197 |    0.06% |
+|                 | minimum-phase truncation |   0.03625% |  0.023 |       0.50 |        1.218 |    0.00% |
+|                 | low group delay          |   8.63192% |  0.901 |       0.10 |        2.453 |    0.00% |
+| steep crossover | Budde iterative          |   2.50945% |  6.901 |      49.61 |        4.892 |   49.27% |
+|                 | phase interpolation      |   1.35880% | 54.483 |      53.04 |        3.235 |   48.11% |
+|                 | complex minimax          |   4.35239% | 72.233 |      53.02 |        3.289 |   47.98% |
+|                 | minimum-phase truncation |   1.22689% | 54.934 |      49.37 |        4.269 |   49.45% |
+|                 | low group delay          |   1.96151% | 42.838 |      49.44 |        4.482 |   49.41% |
 
 <!-- reference-results:end -->
 
-The alternating factorisation wins linear-magnitude accuracy on all five
-targets, often by more than an order of magnitude. That is not a universal
-win: it pays with more delay, reaches 44.77% pre-peak energy on the crossover,
-and needs up to 238 dB of coefficient range there. Phase interpolation is the
-speed winner and generally reduces pre-ringing, at the price of larger
-magnitude error.
+Read this table with the degeneracy check in mind. On the five smooth targets the
+minimum-phase factor already fits its share of the taps, so the alternating
+correction converges to the identity and `Budde iterative` is a delayed
+minimum-phase filter. That is why `minimum-phase truncation` — the same design with
+the delay budget removed — matches or beats it on relative error and RMS dB on every
+one of them, at a third to a twentieth of the delay. Those five rows measure the
+minimum-phase reconstruction, not the factorisation.
 
-Lawson minimax controls peak _complex_ error, not these magnitude-only metrics.
-It helps the deep notch's RMS/maximum dB errors relative to phase interpolation
-(2.55/21.14 dB against 3.08/24.94 dB), but otherwise adds runtime without
-winning a magnitude, delay, or energy column. The direct low-delay optimiser
-wins mean delay on every target and keeps its 2 dB constraint to within
-`8.6e-4`, but its relative magnitude error grows to 3.54–22.80%. Its deep-notch
-peak delay is still 26.61 samples: mean delay near a spectral null must not be
-read as a peak-delay guarantee.
+`steep-crossover` is the row that measures the method. An eighth-order crossover at
+800 Hz does not fit the budget, the linear factor carries 92.4% of its energy off
+centre, and the correction loop accepts five passes. There the alternating
+factorisation reaches 6.901 dB RMS magnitude error against 54.483 dB for phase
+interpolation, 54.934 dB for minimum-phase truncation and 42.838 dB for the
+low-delay optimiser, at a comparable mean group delay. It buys that with
+linear-magnitude accuracy (2.509% against 1.227%) and with the worst group-delay
+ripple of the fixed-delay methods. `TestSteepTargetActuallyExercisesTheFactorisation`
+guards both halves of this, so the suite cannot silently drift back to measuring
+only the degenerate case.
+
+The delay-ripple column is the one axis on which the alternating factorisation is
+consistently last among the fixed-delay methods: it inherits the minimum-phase
+factor's ripple almost exactly wherever the correction is inert.
+
+Lawson minimax controls peak _complex_ error, not these magnitude-only metrics, and
+its reweighting is multiplicative, so after sixteen passes the supplied
+inverse-magnitude weight has almost no influence left. The weight is worth having on
+the plain least-squares solution — 3.616 dB to 0.568 dB on the crossover — and
+almost nothing after a full minimax run. The direct low-delay optimiser wins mean
+delay on every target and keeps its 2 dB constraint, but its relative magnitude
+error grows accordingly; that tolerance is a deliberate dial, not a converged
+result. Its deep-notch peak delay is still large: mean delay near a spectral null
+must not be read as a peak-delay guarantee.
 
 Run `just compare` to regenerate both committed CSVs. The reference-package
 test compares every non-runtime cell with the committed artifact, so metric

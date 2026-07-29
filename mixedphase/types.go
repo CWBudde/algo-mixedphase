@@ -9,6 +9,17 @@ import (
 var (
 	// ErrEmptyPrototype is returned when a design receives no prototype taps.
 	ErrEmptyPrototype = errors.New("mixedphase: empty prototype")
+	// ErrNonFinitePrototype is returned when a prototype contains a NaN or an
+	// infinity. Such a value would otherwise poison the magnitude floor and
+	// propagate silently into every returned tap.
+	ErrNonFinitePrototype = errors.New(
+		"mixedphase: prototype contains a non-finite value",
+	)
+	// ErrNonFiniteConfig is returned when a configuration field that is only
+	// range-checked receives a NaN, which compares false against every bound.
+	ErrNonFiniteConfig = errors.New(
+		"mixedphase: configuration value is not finite",
+	)
 	// ErrInvalidLength is returned when the requested FIR length is invalid.
 	ErrInvalidLength = errors.New("mixedphase: invalid filter length")
 	// ErrInvalidDelay is returned when the requested pre-delay does not fit.

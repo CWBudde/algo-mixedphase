@@ -128,7 +128,7 @@ func TestHilbertReproducesTargetMagnitude(t *testing.T) {
 			MethodCepstrum,
 			MethodHilbert,
 		} {
-			reconstructed, designErr := minimumPhaseSpectrum(
+			reconstructed, _, designErr := minimumPhaseSpectrum(
 				w,
 				targetMagnitude,
 				epsilon,

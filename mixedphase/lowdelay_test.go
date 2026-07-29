@@ -40,7 +40,9 @@ func startingDelay(
 func TestLowGroupDelayGradientMatchesFiniteDifferences(t *testing.T) {
 	prototype := lowpassPrototype(33, 0.1)
 
-	cfg := LowGroupDelayConfig{Length: 17, FFTSize: 64, ToleranceDB: 0.5}
+	// The grid is sized against the 33-tap prototype rather than the 17-tap
+	// output, so it must clear 2*33 to satisfy the oversampling rule.
+	cfg := LowGroupDelayConfig{Length: 17, FFTSize: 128, ToleranceDB: 0.5}
 
 	problem, taps, err := newLowDelayProblem(prototype, cfg)
 	if err != nil {
@@ -455,5 +457,79 @@ func BenchmarkDesignLowGroupDelay(b *testing.B) {
 		if _, err := DesignLowGroupDelay(prototype, cfg); err != nil {
 			b.Fatalf("DesignLowGroupDelay() error = %v", err)
 		}
+	}
+}
+
+// TestLowGroupDelayQuotedImprovement pins the six figures the package
+// documentation quotes for the gain over a truncated minimum-phase design.
+//
+// The fixture is stated here rather than in prose because the documentation
+// previously attributed it to "the 65-tap low-pass used by the mixedphase
+// example", a fixture that does not exist: the example harness designs 129 taps
+// from a 257-tap prototype.
+func TestLowGroupDelayQuotedImprovement(t *testing.T) {
+	const (
+		length     = 65
+		cutoff     = 0.08
+		fftSize    = 1024
+		iterations = 200
+	)
+
+	prototype := lowpassPrototype(length, cutoff)
+
+	baseline, err := DesignLowGroupDelay(prototype, LowGroupDelayConfig{
+		Length:      length,
+		FFTSize:     fftSize,
+		ToleranceDB: 1,
+		Iterations:  -1,
+	})
+	if err != nil {
+		t.Fatalf("DesignLowGroupDelay(starting point) error = %v", err)
+	}
+
+	assertClose(t, "baseline mean", baseline.GroupDelay.Mean, 12.70, 0.005)
+	assertClose(t, "baseline peak", baseline.GroupDelay.Peak, 23.58, 0.005)
+
+	tolerances := []struct {
+		toleranceDB float64
+		wantMean    float64
+		wantPeak    float64
+	}{
+		{toleranceDB: 1, wantMean: 12.62, wantPeak: 22.72},
+		{toleranceDB: 6, wantMean: 12.08, wantPeak: 21.18},
+	}
+
+	for _, tolerance := range tolerances {
+		result, designErr := DesignLowGroupDelay(prototype, LowGroupDelayConfig{
+			Length:      length,
+			FFTSize:     fftSize,
+			ToleranceDB: tolerance.toleranceDB,
+			Iterations:  iterations,
+		})
+		if designErr != nil {
+			t.Fatalf(
+				"DesignLowGroupDelay(%g dB) error = %v",
+				tolerance.toleranceDB,
+				designErr,
+			)
+		}
+
+		assertClose(t, "mean", result.GroupDelay.Mean, tolerance.wantMean, 0.005)
+		assertClose(t, "peak", result.GroupDelay.Peak, tolerance.wantPeak, 0.005)
+
+		if result.GroupDelay.Mean >= baseline.GroupDelay.Mean {
+			t.Errorf(
+				"%g dB tolerance did not improve on the minimum-phase start",
+				tolerance.toleranceDB,
+			)
+		}
+	}
+}
+
+func assertClose(t *testing.T, name string, got, want, tolerance float64) {
+	t.Helper()
+
+	if difference := math.Abs(got - want); difference > tolerance {
+		t.Errorf("%s = %.4f, want %.2f (within %.3f)", name, got, want, tolerance)
 	}
 }
