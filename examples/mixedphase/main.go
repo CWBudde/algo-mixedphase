@@ -83,8 +83,7 @@ func run(
 	}
 
 	if responses != "" || impulses != "" {
-		frequencyRows, impulseRows, responseErr :=
-			reference.RepresentativeResponses()
+		frequencyRows, impulseRows, responseErr := reference.RepresentativeResponses()
 		if responseErr != nil {
 			return responseErr
 		}

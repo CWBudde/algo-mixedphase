@@ -114,15 +114,15 @@ func RepresentativeResponses() (
 			}
 
 			impulseRows = append(impulseRows, ImpulseResponseRow{
-				Target:               target.Name,
-				Method:               method.name,
-				SampleRate:           SampleRate,
-				Taps:                 len(result.Taps),
-				FFTSize:              FFTSize,
-				DelayBudget:          DelayBudget,
-				SampleIndex:          sample,
-				PeakIndex:            result.Metrics.PeakIndex,
-				PeakAlignedIndex:     sample - result.Metrics.PeakIndex,
+				Target:                target.Name,
+				Method:                method.name,
+				SampleRate:            SampleRate,
+				Taps:                  len(result.Taps),
+				FFTSize:               FFTSize,
+				DelayBudget:           DelayBudget,
+				SampleIndex:           sample,
+				PeakIndex:             result.Metrics.PeakIndex,
+				PeakAlignedIndex:      sample - result.Metrics.PeakIndex,
 				Coefficient:           coefficient,
 				NormalisedCoefficient: normalised,
 			})
@@ -133,7 +133,7 @@ func RepresentativeResponses() (
 }
 
 func realSpectrum(
-	plan *algofft.Plan64,
+	plan *algofft.Plan[complex128],
 	values []float64,
 ) ([]complex128, error) {
 	input := make([]complex128, FFTSize)

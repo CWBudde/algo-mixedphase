@@ -22,7 +22,7 @@ be regenerated with `just compare`.
       implementation; spectral-factorisation error, numerical sensitivity and runtime
       compared in `mixedphase/doc.go`.
 - [x] Prescribed complex-response design with weighted least squares
-      (`DesignComplexLeastSquares`), followed by a Lawson/IRLS path for peak-error control.
+      (`DesignComplexLeastSquares`), followed by a LawsVjton/IRLS path for peak-error control.
 - [x] Direct magnitude-constrained, low-group-delay optimisation after Wu–Gao–Teo
       (`DesignLowGroupDelay`), with optimiser convergence and initialisation sensitivity
       documented — including the local minimum reached from a linear-phase start.

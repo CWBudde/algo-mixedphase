@@ -1,8 +1,14 @@
-#import "charts.typ": accuracy-delay-chart, graphiceq-chart, pre-ringing-chart
-#import "style.typ": code-path, draft-note, paper
+#import "charts.typ": (
+  accuracy-delay-chart, graphiceq-chart, group-delay-response-chart,
+  magnitude-response-chart, peak-aligned-impulse-chart, pre-ringing-chart,
+  representative-results-table,
+)
+#import "style.typ": code-path, paper
 
 #let revision = sys.inputs.at("revision", default: "working tree")
 #let reference-results = csv("../reference-results.csv", row-type: dictionary)
+#let reference-response = csv("../reference-response.csv", row-type: dictionary)
+#let reference-impulse = csv("../reference-impulse.csv", row-type: dictionary)
 #let graphiceq-results = csv("../graphiceq-results.csv", row-type: dictionary)
 
 #show: paper.with(
@@ -357,6 +363,90 @@ The alternating crossover result has substantial energy ahead of its peak,
 while several equaliser and notch cases concentrate almost all energy at or
 after the peak. The paper therefore reports both delay and energy distribution.
 
+== Representative realised responses
+
+The parametric-EQ case exposes the shape behind the scalar metrics without the
+ill-conditioned stopband phase of a low-pass example. All plots in this
+section use the same realised 129-tap filters at 48 kHz on the 1024-point
+design and analysis grid. The three prescribed-phase designs use
+$d=16$ samples. The alternating design permits at most 12 passes and stops
+before rising error or below a $10^(-7)$ dB change; phase interpolation has no
+iterative loop; complex minimax permits 16 Lawson passes with a $10^(-4)$
+stopping tolerance; and low-group-delay optimisation uses a 2 dB magnitude
+tolerance and four stages of at most 80 L-BFGS steps. The title-page repository
+revision identifies the commit that produced the artifacts.
+
+#figure(
+  magnitude-response-chart(reference-response),
+  caption: [
+    Target and realised magnitude for the parametric-EQ fixture. The common
+    budget is 48 kHz, $N=129$, and $K=1024$; the prescribed-phase methods use
+    $d=16$, while low-group-delay optimisation has no fixed-delay constraint
+    and instead uses the stated 2 dB magnitude tolerance. Line dash, as well
+    as colour, identifies each method. Source:
+    #code-path("docs/reference-response.csv").
+  ],
+) <representative-magnitude>
+
+@representative-magnitude shows that the alternating construction follows this
+smooth target most closely. Phase interpolation and complex minimax preserve
+the intended bell but introduce visibly larger finite-support error. The
+low-group-delay result spends its allowed magnitude tolerance to move energy
+earlier.
+
+#figure(
+  group-delay-response-chart(reference-response),
+  caption: [
+    Realised group delay for the same parametric-EQ designs and budgets as
+    @representative-magnitude. Only the weighted 1.8--5 kHz analysis band is
+    shown; each bin is weighted by the squared target magnitude. Group delay
+    outside this band is deliberately excluded rather than interpreted.
+    Source: #code-path("docs/reference-response.csv").
+  ],
+) <representative-group-delay>
+
+The prescribed-phase methods cluster around the same frequency-dependent delay,
+with the alternating response reaching a somewhat higher peak. The phase-free
+optimiser produces the lowest mean delay, but its local solution also contains
+negative group delay in part of the weighted analysis band. That local
+behaviour is visible here and is not captured by a single mean value.
+
+#figure(
+  peak-aligned-impulse-chart(reference-impulse),
+  caption: [
+    Peak-aligned realised impulse responses for the same parametric-EQ designs
+    and budgets as @representative-magnitude. Each 129-tap response is divided
+    by its own absolute peak; the horizontal origin is that peak, so the plot
+    compares temporal distribution rather than gain. Source:
+    #code-path("docs/reference-impulse.csv").
+  ],
+) <representative-impulse>
+
+Peak alignment in @representative-impulse separates waveform shape from
+absolute latency. The three prescribed-phase solutions retain small
+coefficients before the peak; the optimised low-delay solution peaks at its
+first sample. The full unnormalised coefficients and peak indices remain in
+the committed CSV.
+
+#figure(
+  text(size: 7.5pt)[
+    #representative-results-table(reference-results)
+  ],
+  caption: [
+    Scalar results for the representative parametric-EQ designs, read directly
+    from #code-path("docs/reference-results.csv"). Delay is the
+    magnitude-squared-weighted mean over 1.8--5 kHz; $P$ is the accepted count
+    (alternating passes, Lawson passes, or total L-BFGS steps). The tap, grid,
+    delay, weight, tolerance, and iteration budgets are those stated above.
+  ],
+) <representative-results>
+
+@representative-results makes the trade explicit: the alternating method
+achieves the smallest response errors in this case, whereas the phase-free
+optimiser reduces mean delay by roughly an order of magnitude under a
+different, tolerance-constrained objective. The table is a representative
+case, not a claim that one method dominates every target.
+
 == Structure-specific latency and accuracy
 
 The graphic-equaliser comparison is read from
@@ -379,12 +469,6 @@ At each shared latency in @graphiceq-tradeoff, the hybrid structure has lower
 RMS error than the shortened all-FIR alternative. This does not generalise to
 arbitrary targets: the shelf cascade cannot reproduce a rapidly alternating
 octave-band “zigzag” without large interaction error.
-
-#draft-note[
-  The final evaluation will add generated magnitude, group-delay, and
-  peak-aligned impulse-response plots for representative targets, with the
-  optimiser budget stated in every caption.
-]
 
 = Reproducibility appendix
 
@@ -492,6 +576,20 @@ revision shown on the title page.
     accepted counts, not maxima. _Reproduce:_ `just compare-check`; rebuild
     with `just paper`.
 
+  - *@representative-magnitude, @representative-group-delay,
+      @representative-impulse, and @representative-results.* _Generator:_
+    #code-path("internal/reference.RepresentativeResponses"), invoked by
+    #code-path("examples/mixedphase"). _Artifacts:_
+    #code-path("docs/reference-response.csv"),
+    #code-path("docs/reference-impulse.csv"), and
+    #code-path("docs/reference-results.csv"); all three are byte-compared by
+    #code-path("TestRepresentativeResponsesCoverRealisedDesigns") or
+    #code-path("TestRunCoversEveryMethodAndMetric"). _Budget:_ the
+    parametric-EQ target at 48 kHz, $N=129$, $K=1024$, magnitude-squared delay
+    weight from 1.8 to 5 kHz, $d=16$ for prescribed phase, and the exact
+    tolerance and iteration limits listed under “Representative realised
+    responses.” _Reproduce:_ `just compare-check`; rebuild with `just paper`.
+
   - *@graphiceq-tradeoff.* _Generator:_ #code-path("examples/graphiceq").
     _Artifact:_ #code-path("docs/graphiceq-results.csv"). Each hybrid split is
     paired with an all-FIR #code-path("graphiceq.Design") whose
@@ -502,17 +600,17 @@ revision shown on the title page.
 
 The Typst source, bibliography, generated figure inputs, and build workflow
 live beside the implementation; the PDF is a build artifact. There are no
-hand-entered quantitative result tables in this draft: @api-notation is a
-notation table, while all plotted values come from the two committed CSVs.
+hand-entered quantitative results: @representative-results and every plot read
+committed CSV fields directly.
 
 = Limitations and open work
 
 The current draft intentionally leaves three conclusions open. First, the
-committed benchmark suite has not yet been turned into the paper's full
-cross-target argument. Second, the original 2012 figures have not been
-reconstructed from machine-readable data. Third, perceptual evaluation is
-limited to objective pre-ringing and delay proxies; controlled listening tests
-are outside the present scope.
+committed benchmark suite still requires a final cross-target interpretation
+that gives failure cases equal prominence. Second, the original 2012 figures
+have not been reconstructed from machine-readable data. Third, perceptual
+evaluation is limited to objective pre-ringing and delay proxies; controlled
+listening tests are outside the present scope.
 
 = Conclusion
 
@@ -527,8 +625,8 @@ More broadly, mixed-phase FIR design is not one optimisation problem but a
 family of choices about which phase information to preserve, which error to
 minimise, and how to spend finite support. This revision makes those choices
 and their provenance explicit and binds its new evidence to executable designs.
-Final comparative conclusions will follow after the full cross-target analysis
-and representative response plots have been technically reviewed.
+Final comparative conclusions will follow after the full cross-target and
+failure-mode analysis has been technically reviewed.
 
 #colbreak()
 

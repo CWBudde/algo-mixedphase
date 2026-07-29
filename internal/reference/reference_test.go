@@ -174,6 +174,95 @@ func TestWriteCSV(t *testing.T) {
 	}
 }
 
+func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
+	frequencyRows, impulseRows, err := RepresentativeResponses()
+	if err != nil {
+		t.Fatalf("RepresentativeResponses() error = %v", err)
+	}
+
+	const methodCount = 4
+	if len(frequencyRows) != methodCount*(FFTSize/2+1) {
+		t.Fatalf(
+			"frequency row count = %d, want %d",
+			len(frequencyRows),
+			methodCount*(FFTSize/2+1),
+		)
+	}
+
+	if len(impulseRows) != methodCount*TapCount {
+		t.Fatalf(
+			"impulse row count = %d, want %d",
+			len(impulseRows),
+			methodCount*TapCount,
+		)
+	}
+
+	weightedRows := 0
+	for _, row := range frequencyRows {
+		if row.Target != RepresentativeTarget ||
+			row.SampleRate != SampleRate ||
+			row.Taps != TapCount ||
+			row.FFTSize != FFTSize {
+			t.Errorf("inconsistent frequency-response budget: %+v", row)
+		}
+
+		values := []float64{
+			row.FrequencyHz,
+			row.TargetMagnitudeDB,
+			row.MagnitudeDB,
+			row.GroupDelay,
+			row.DelayWeight,
+		}
+		for _, value := range values {
+			if math.IsNaN(value) || math.IsInf(value, 0) {
+				t.Errorf("%s has non-finite response value %g", row.Method, value)
+			}
+		}
+
+		if row.DelayWeight > 0 {
+			weightedRows++
+		}
+	}
+
+	if weightedRows == 0 {
+		t.Fatal("representative response contains no weighted group-delay bins")
+	}
+
+	peaks := 0
+	for _, row := range impulseRows {
+		if row.Target != RepresentativeTarget ||
+			row.SampleRate != SampleRate ||
+			row.Taps != TapCount ||
+			row.FFTSize != FFTSize {
+			t.Errorf("inconsistent impulse-response budget: %+v", row)
+		}
+
+		if math.IsNaN(row.Coefficient) ||
+			math.IsInf(row.Coefficient, 0) ||
+			math.IsNaN(row.NormalisedCoefficient) ||
+			math.IsInf(row.NormalisedCoefficient, 0) {
+			t.Errorf("%s has non-finite impulse row: %+v", row.Method, row)
+		}
+
+		if row.PeakAlignedIndex == 0 {
+			peaks++
+			if math.Abs(math.Abs(row.NormalisedCoefficient)-1) > 1e-12 {
+				t.Errorf(
+					"%s aligned peak = %g, want unit magnitude",
+					row.Method,
+					row.NormalisedCoefficient,
+				)
+			}
+		}
+	}
+
+	if peaks != methodCount {
+		t.Errorf("aligned peak count = %d, want %d", peaks, methodCount)
+	}
+
+	assertCommittedResponseCSVs(t, frequencyRows, impulseRows)
+}
+
 func TestMarkdownTable(t *testing.T) {
 	rows := []Row{
 		{
@@ -313,6 +402,35 @@ func TestUpdateMarkdownTableReportsMissingFile(t *testing.T) {
 	}
 }
 
+func assertCommittedResponseCSVs(
+	t *testing.T,
+	frequencyRows []FrequencyResponseRow,
+	impulseRows []ImpulseResponseRow,
+) {
+	t.Helper()
+
+	var responses bytes.Buffer
+	if err := WriteResponseCSV(&responses, frequencyRows); err != nil {
+		t.Fatalf("WriteResponseCSV() error = %v", err)
+	}
+
+	var impulses bytes.Buffer
+	if err := WriteImpulseCSV(&impulses, impulseRows); err != nil {
+		t.Fatalf("WriteImpulseCSV() error = %v", err)
+	}
+
+	assertCommittedCSV(
+		t,
+		"reference-response.csv",
+		responses.Bytes(),
+	)
+	assertCommittedCSV(
+		t,
+		"reference-impulse.csv",
+		impulses.Bytes(),
+	)
+}
+
 func assertCommittedQualityCSV(t *testing.T, rows []Row) {
 	t.Helper()
 
@@ -320,6 +438,12 @@ func assertCommittedQualityCSV(t *testing.T, rows []Row) {
 	if err := WriteCSV(&generated, rows); err != nil {
 		t.Fatalf("WriteCSV() error = %v", err)
 	}
+
+	assertCommittedCSV(t, "reference-results.csv", generated.Bytes())
+}
+
+func assertCommittedCSV(t *testing.T, name string, generated []byte) {
+	t.Helper()
 
 	_, source, _, ok := runtime.Caller(0)
 	if !ok {
@@ -331,7 +455,7 @@ func assertCommittedQualityCSV(t *testing.T, rows []Row) {
 		"..",
 		"..",
 		"docs",
-		"reference-results.csv",
+		name,
 	)
 
 	committed, err := os.ReadFile(path)
@@ -341,10 +465,10 @@ func assertCommittedQualityCSV(t *testing.T, rows []Row) {
 
 	// A plain byte comparison. The suite carries no timing any more, so there
 	// is nothing left to normalise away before comparing.
-	if !bytes.Equal(generated.Bytes(), committed) {
+	if !bytes.Equal(generated, committed) {
 		t.Fatal(
-			"committed quality results are stale; run `just compare` " +
-				"and review the metric changes",
+			"committed reference data are stale; run `just compare` " +
+				"and review the result changes",
 		)
 	}
 }

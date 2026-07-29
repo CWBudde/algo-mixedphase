@@ -74,7 +74,7 @@ general mixed-phase methods. The separate graphic-EQ comparison remains scoped
 to its octave-band structure.
 
 ```bash
-just compare       # Regenerate docs/reference-results.csv and docs/graphiceq-results.csv
+just compare       # Regenerate the committed comparison and paper-response CSVs
 just compare-check # Prove those files are byte-reproducible
 ```
 

@@ -82,12 +82,12 @@ type ImpulseResponseRow struct {
 	Target                string
 	Method                string
 	SampleRate            int
-	Taps                   int
-	FFTSize                int
-	DelayBudget            int
-	SampleIndex            int
-	PeakIndex              int
-	PeakAlignedIndex       int
-	Coefficient            float64
-	NormalisedCoefficient  float64
+	Taps                  int
+	FFTSize               int
+	DelayBudget           int
+	SampleIndex           int
+	PeakIndex             int
+	PeakAlignedIndex      int
+	Coefficient           float64
+	NormalisedCoefficient float64
 }

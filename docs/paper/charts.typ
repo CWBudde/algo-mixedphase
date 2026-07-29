@@ -29,6 +29,12 @@
   log10(minimum),
   log10(maximum),
 )
+#let x-log(value, minimum, maximum) = (
+  plot-left
+    + (log10(value) - log10(minimum))
+      / (log10(maximum) - log10(minimum))
+      * (plot-right - plot-left)
+)
 
 #let method-index(method) = if method == "budde-iterative" {
   0
@@ -48,6 +54,16 @@
   "Complex minimax"
 } else {
   "Low group delay"
+}
+
+#let method-dash(method) = if method == "budde-iterative" {
+  none
+} else if method == "phase-interpolation" {
+  "13 7"
+} else if method == "complex-minimax" {
+  "3 6"
+} else {
+  "13 5 3 5"
 }
 
 #let svg-text(
@@ -211,6 +227,85 @@
   }
 }
 
+#let polyline(
+  rows,
+  x-position,
+  y-position,
+  value-key,
+  stroke,
+  width: 3,
+  dash: none,
+) = {
+  if rows.len() == 0 {
+    ""
+  } else {
+    let points = rows
+      .map(row => (
+        number(x-position(float(row.at("frequency_hz")))),
+        ",",
+        number(y-position(float(row.at(value-key)))),
+      ).join(""))
+      .join(" ")
+    let dash-attr = if dash == none {
+      ""
+    } else {
+      (" stroke-dasharray=\"", dash, "\"").map(str).join("")
+    }
+    (
+      "<polyline points=\"",
+      points,
+      "\" fill=\"none\" stroke=\"",
+      stroke,
+      "\" stroke-width=\"",
+      str(width),
+      "\" stroke-linejoin=\"round\" stroke-linecap=\"round\"",
+      dash-attr,
+      "/>",
+    )
+      .map(str)
+      .join("")
+  }
+}
+
+#let impulse-polyline(
+  rows,
+  x-position,
+  y-position,
+  stroke,
+  width: 3,
+  dash: none,
+) = {
+  if rows.len() == 0 {
+    ""
+  } else {
+    let points = rows
+      .map(row => (
+        number(x-position(float(row.at("peak_aligned_index")))),
+        ",",
+        number(y-position(float(row.at("normalised_coefficient")))),
+      ).join(""))
+      .join(" ")
+    let dash-attr = if dash == none {
+      ""
+    } else {
+      (" stroke-dasharray=\"", dash, "\"").map(str).join("")
+    }
+    (
+      "<polyline points=\"",
+      points,
+      "\" fill=\"none\" stroke=\"",
+      stroke,
+      "\" stroke-width=\"",
+      str(width),
+      "\" stroke-linejoin=\"round\" stroke-linecap=\"round\"",
+      dash-attr,
+      "/>",
+    )
+      .map(str)
+      .join("")
+  }
+}
+
 #let chart-image(body, definitions: "") = {
   let svg = (
     "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 ",
@@ -312,6 +407,59 @@
           anchor: "start",
           size: 17,
         ),
+      )
+        .map(str)
+        .join("")
+    })
+    .join("")
+}
+
+#let response-legend(include-target: false, y: 401) = {
+  let entries = if include-target {
+    (
+      ("target", "Target"),
+      ("budde-iterative", method-label("budde-iterative")),
+      ("phase-interpolation", method-label("phase-interpolation")),
+      ("complex-minimax", method-label("complex-minimax")),
+      ("low-group-delay", method-label("low-group-delay")),
+    )
+  } else {
+    (
+      ("budde-iterative", method-label("budde-iterative")),
+      ("phase-interpolation", method-label("phase-interpolation")),
+      ("complex-minimax", method-label("complex-minimax")),
+      ("low-group-delay", method-label("low-group-delay")),
+    )
+  }
+  entries
+    .enumerate()
+    .map(pair => {
+      let index = pair.at(0)
+      let method = pair.at(1).at(0)
+      let label = pair.at(1).at(1)
+      let x = plot-left + calc.rem(index, 2) * 292
+      let row-y = y + calc.floor(index / 2) * 27
+      let color = if method == "target" {
+        ink
+      } else {
+        method-colors.at(method-index(method))
+      }
+      let dash = if method == "target" {
+        "8 5"
+      } else {
+        method-dash(method)
+      }
+      (
+        svg-line(
+          x,
+          row-y - 5,
+          x + 34,
+          row-y - 5,
+          stroke: color,
+          width: 4,
+          dash: dash,
+        ),
+        svg-text(x + 44, row-y, label, anchor: "start", size: 16),
       )
         .map(str)
         .join("")
@@ -504,4 +652,148 @@
     .map(str)
     .join("")
   chart-image((chart-axes, hybrid-points, fir-points, legend).map(str).join(""))
+}
+
+#let magnitude-response-chart(rows) = {
+  let visible = rows.filter(row => {
+    let frequency = float(row.at("frequency_hz"))
+    frequency >= 50 and frequency <= 20000
+  })
+  let x-pos(value) = x-log(value, 50, 20000)
+  let y-pos(value) = y-linear(value, -4, 12)
+  let chart-axes = axes(
+    ((50, "50"), (100, "100"), (1000, "1k"), (10000, "10k"), (20000, "20k")),
+    ((-4, "-4"), (0, "0"), (4, "4"), (8, "8"), (12, "12")),
+    x-pos,
+    y-pos,
+    "Frequency (Hz)",
+    "Magnitude (dB)",
+  )
+  let target = visible.filter(row => row.at("method") == "budde-iterative")
+  let target-line = polyline(
+    target,
+    x-pos,
+    y-pos,
+    "target_magnitude_db",
+    ink,
+    width: 4,
+    dash: "8 5",
+  )
+  let methods = (
+    "budde-iterative",
+    "phase-interpolation",
+    "complex-minimax",
+    "low-group-delay",
+  )
+  let lines = methods
+    .map(method => polyline(
+      visible.filter(row => row.at("method") == method),
+      x-pos,
+      y-pos,
+      "magnitude_db",
+      method-colors.at(method-index(method)),
+      dash: method-dash(method),
+    ))
+    .join("")
+  chart-image(
+    (chart-axes, lines, target-line, response-legend(include-target: true))
+      .map(str)
+      .join(""),
+  )
+}
+
+#let group-delay-response-chart(rows) = {
+  let visible = rows.filter(row => float(row.at("delay_weight")) > 0)
+  let x-pos(value) = x-linear(value, 1800, 5000)
+  let y-pos(value) = y-linear(value, -40, 40)
+  let chart-axes = axes(
+    (
+      (1800, "1.8k"),
+      (2600, "2.6k"),
+      (3400, "3.4k"),
+      (4200, "4.2k"),
+      (5000, "5k"),
+    ),
+    ((-40, "-40"), (-20, "-20"), (0, "0"), (20, "20"), (40, "40")),
+    x-pos,
+    y-pos,
+    "Frequency (Hz)",
+    "Group delay (samples)",
+  )
+  let methods = (
+    "budde-iterative",
+    "phase-interpolation",
+    "complex-minimax",
+    "low-group-delay",
+  )
+  let lines = methods
+    .map(method => polyline(
+      visible.filter(row => row.at("method") == method),
+      x-pos,
+      y-pos,
+      "group_delay_samples",
+      method-colors.at(method-index(method)),
+      dash: method-dash(method),
+    ))
+    .join("")
+  chart-image(
+    (chart-axes, lines, response-legend()).map(str).join(""),
+  )
+}
+
+#let peak-aligned-impulse-chart(rows) = {
+  let visible = rows.filter(row => {
+    let sample = int(row.at("peak_aligned_index"))
+    sample >= -16 and sample <= 48
+  })
+  let x-pos(value) = x-linear(value, -16, 48)
+  let y-pos(value) = y-linear(value, -0.1, 1.05)
+  let chart-axes = axes(
+    ((-16, "-16"), (0, "0"), (16, "16"), (32, "32"), (48, "48")),
+    ((-0.1, "-0.1"), (0, "0"), (0.5, "0.5"), (1, "1")),
+    x-pos,
+    y-pos,
+    "Sample relative to peak",
+    "Normalised coefficient",
+  )
+  let methods = (
+    "budde-iterative",
+    "phase-interpolation",
+    "complex-minimax",
+    "low-group-delay",
+  )
+  let lines = methods
+    .map(method => impulse-polyline(
+      visible.filter(row => row.at("method") == method),
+      x-pos,
+      y-pos,
+      method-colors.at(method-index(method)),
+      dash: method-dash(method),
+    ))
+    .join("")
+  chart-image(
+    (chart-axes, lines, response-legend()).map(str).join(""),
+  )
+}
+
+#let representative-results-table(rows) = {
+  let representative = rows.filter(row => row.at("target") == "parametric-eq")
+  let cells = representative
+    .map(row => (
+      [#method-label(row.at("method"))],
+      [#number(100 * float(row.at("relative_magnitude_error")), digits: 4)],
+      [#number(float(row.at("rms_magnitude_error_db")), digits: 3)],
+      [#number(float(row.at("mean_group_delay")), digits: 2)],
+      [#number(100 * float(row.at("pre_peak_energy_ratio")), digits: 3)],
+      [#row.at("iterations")],
+    ))
+    .flatten()
+  table(
+    columns: (1.5fr, 0.7fr, 0.7fr, 0.65fr, 0.65fr, 0.45fr),
+    align: (left, right, right, right, right, right),
+    table.header(
+      [Method], [Rel. err.\ (%)], [RMS (dB)], [Delay], [Pre-peak (\%)], [$P$]
+    ),
+    ..cells,
+  )
 }
