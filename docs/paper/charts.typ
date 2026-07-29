@@ -896,12 +896,12 @@
 #let peak-aligned-impulse-chart(rows) = {
   let visible = rows.filter(row => {
     let sample = int(row.at("peak_aligned_index"))
-    sample >= -16 and sample <= 48
+    sample >= -24 and sample <= 48
   })
-  let x-pos(value) = x-linear(value, -16, 48)
+  let x-pos(value) = x-linear(value, -24, 48)
   let y-pos(value) = y-linear(value, -80, 0)
   let chart-axes = axes(
-    ((-16, "-16"), (0, "0"), (16, "16"), (32, "32"), (48, "48")),
+    ((-24, "-24"), (-16, "-16"), (0, "0"), (16, "16"), (32, "32"), (48, "48")),
     ((-80, "-80"), (-60, "-60"), (-40, "-40"), (-20, "-20"), (0, "0")),
     x-pos,
     y-pos,

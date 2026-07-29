@@ -443,16 +443,22 @@ the complex-response norm or band priorities are the actual specification.
 
 == Representative realised responses
 
-The parametric-EQ case exposes the shape behind the scalar metrics without the
-ill-conditioned stopband phase of a low-pass example. All plots in this
-section use the same realised 129-tap filters at 48 kHz on the 1024-point
-design and analysis grid. The three prescribed-phase designs use
-$d=16$ samples. The alternating design permits at most 12 passes and stops
-before rising error or below a $10^(-7)$ dB change; phase interpolation has no
-iterative loop; complex minimax permits 16 Lawson passes with a $10^(-4)$
-stopping tolerance; and low-group-delay optimisation uses a 2 dB magnitude
-tolerance and four stages of at most 80 L-BFGS steps. The title-page repository
-revision identifies the commit that produced the artifacts.
+The parametric-EQ case exposes frequency-response shape and scalar metrics
+without the ill-conditioned stopband phase of a low-pass example. The impulse
+plot instead uses the first-order 1 kHz low-pass from the common suite, matching
+the target class illustrated in the original paper. This separation is
+deliberate: the smooth parametric-EQ residual is nearly an identity delayed to
+the centre of its linear-phase support, so it does not demonstrate how the
+alternating construction can spend the available pre-peak support.
+
+Both examples use realised 129-tap filters at 48 kHz on the 1024-point design
+and analysis grid. The three prescribed-phase designs use $d=16$ samples. The
+alternating design permits at most 12 passes and stops before rising error or
+below a $10^(-7)$ dB change; phase interpolation has no iterative loop; complex
+minimax permits 16 Lawson passes with a $10^(-4)$ stopping tolerance; and
+low-group-delay optimisation uses a 2 dB magnitude tolerance and four stages
+of at most 80 L-BFGS steps. The title-page repository revision identifies the
+commit that produced the artifacts.
 
 #figure(
   magnitude-response-chart(reference-response),
@@ -492,22 +498,25 @@ behaviour is visible here and is not captured by a single mean value.
 #figure(
   peak-aligned-impulse-chart(reference-impulse),
   caption: [
-    Peak-aligned realised impulse responses for the same parametric-EQ designs
-    and budgets as @representative-magnitude. Each 129-tap response is divided
-    by its own absolute peak and displayed as coefficient magnitude in dB,
-    with values below −80 dB clipped to the plot floor. This intentionally
-    discards coefficient sign so low-level temporal detail remains visible.
-    The horizontal origin is each response's peak, so the plot compares
-    temporal distribution rather than gain. Source:
+    Peak-aligned realised impulse responses for the first-order 1 kHz low-pass
+    target and the same tap, grid, and optimiser budgets as
+    @representative-magnitude. Each response is divided by its own absolute
+    peak and displayed as coefficient magnitude in dB, with values below
+    −80 dB clipped to the plot floor. This intentionally discards coefficient
+    sign so low-level temporal detail remains visible. The horizontal origin
+    is each response's peak, so the plot compares temporal distribution rather
+    than gain. Source:
     #code-path("docs/reference-impulse.csv").
   ],
 ) <representative-impulse>
 
 Peak alignment in @representative-impulse separates waveform shape from
-absolute latency. The dB view reveals the three prescribed-phase solutions'
-low-level coefficients before the peak; the optimised low-delay solution peaks
-at its first sample. Coefficient signs, full unnormalised values, and peak
-indices remain in the committed CSV.
+absolute latency. Unlike the parametric-EQ case, the low-pass residual makes
+substantial use of the support before the alternating response's peak. The
+plot therefore distinguishes a genuinely mixed-phase response from a
+minimum-phase response followed by an almost pure delay. Coefficient signs,
+full unnormalised values, peak indices, and the exact pre-peak energy ratios
+remain in the committed CSV and scalar result set.
 
 #figure(
   text(size: 7.5pt)[
@@ -760,10 +769,12 @@ revision shown on the title page.
     #code-path("docs/reference-results.csv"); all three are byte-compared by
     #code-path("TestRepresentativeResponsesCoverRealisedDesigns") or
     #code-path("TestRunCoversEveryMethodAndMetric"). _Budget:_ the
-    parametric-EQ target at 48 kHz, $N=129$, $K=1024$, magnitude-squared delay
-    weight from 1.8 to 5 kHz, $d=16$ for prescribed phase, and the exact
-    tolerance and iteration limits listed under “Representative realised
-    responses.” _Reproduce:_ `just compare-check`; rebuild with `just paper`.
+    parametric-EQ response target and first-order 1 kHz low-pass impulse target
+    at 48 kHz, $N=129$, $K=1024$, $d=16$ for prescribed phase, and the exact
+    weights, tolerances, and iteration limits listed under “Representative
+    realised responses.” The reference test additionally requires the plotted
+    alternating low-pass to place at least 10% of its energy before its peak.
+    _Reproduce:_ `just compare-check`; rebuild with `just paper`.
 
   - *@graphiceq-tradeoff.* _Generator:_ #code-path("examples/graphiceq").
     _Artifact:_ #code-path("docs/graphiceq-results.csv"). Each hybrid split is

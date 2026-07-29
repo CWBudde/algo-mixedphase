@@ -65,10 +65,11 @@ behind quoted numbers.
 
 Normal paper builds consume committed data and never rerun timing benchmarks. The charts
 read `docs/reference-results.csv`, `docs/reference-response.csv`,
-`docs/reference-impulse.csv`, and `docs/graphiceq-results.csv` directly. The response and
-impulse artifacts contain the realised parametric-EQ designs used for the paper's
-magnitude, weighted group-delay, and peak-aligned impulse figures. Only the explicit
-`just paper-refresh` command reruns the benchmark generators.
+`docs/reference-impulse.csv`, and `docs/graphiceq-results.csv` directly. The response
+artifact contains the realised parametric-EQ designs used for the magnitude and weighted
+group-delay figures. The impulse artifact uses the first-order 1 kHz low-pass target so the
+peak-aligned plot visibly exercises the alternating design's pre-peak support. Only the
+explicit `just paper-refresh` command reruns the benchmark generators.
 
 The reproducibility appendix maps every public design method, numbered equation, figure,
 and table to its implementation, named tests, exact reference budget, artifact, and

@@ -9,8 +9,8 @@ import (
 )
 
 // RepresentativeResponses designs every general method for
-// RepresentativeTarget and samples the realised frequency and impulse
-// responses used by the paper.
+// RepresentativeTarget and ImpulseTarget, then samples the realised frequency
+// and impulse responses used by the paper.
 func RepresentativeResponses() (
 	[]FrequencyResponseRow,
 	[]ImpulseResponseRow,
@@ -21,21 +21,14 @@ func RepresentativeResponses() (
 		return nil, nil, err
 	}
 
-	var target Target
-
-	for _, candidate := range targets {
-		if candidate.Name == RepresentativeTarget {
-			target = candidate
-
-			break
-		}
+	responseTarget, err := findTarget(targets, RepresentativeTarget)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	if target.Name == "" {
-		return nil, nil, fmt.Errorf(
-			"reference: representative target %q is missing",
-			RepresentativeTarget,
-		)
+	impulseTarget, err := findTarget(targets, ImpulseTarget)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	plan, err := algofft.NewPlan64(FFTSize)
@@ -46,7 +39,7 @@ func RepresentativeResponses() (
 		)
 	}
 
-	targetSpectrum, err := realSpectrum(plan, target.Prototype)
+	targetSpectrum, err := realSpectrum(plan, responseTarget.Prototype)
 	if err != nil {
 		return nil, nil, fmt.Errorf(
 			"reference: transform representative target: %w",
@@ -66,11 +59,11 @@ func RepresentativeResponses() (
 	)
 
 	for _, method := range methods() {
-		result, designErr := method.design(target)
+		result, designErr := method.design(responseTarget)
 		if designErr != nil {
 			return nil, nil, fmt.Errorf(
 				"reference: design representative %s/%s: %w",
-				target.Name,
+				responseTarget.Name,
 				method.name,
 				designErr,
 			)
@@ -80,7 +73,7 @@ func RepresentativeResponses() (
 		if transformErr != nil {
 			return nil, nil, fmt.Errorf(
 				"reference: transform representative %s/%s: %w",
-				target.Name,
+				responseTarget.Name,
 				method.name,
 				transformErr,
 			)
@@ -88,7 +81,7 @@ func RepresentativeResponses() (
 
 		for bin := range FFTSize/2 + 1 {
 			frequencyRows = append(frequencyRows, FrequencyResponseRow{
-				Target:            target.Name,
+				Target:            responseTarget.Name,
 				Method:            method.name,
 				SampleRate:        SampleRate,
 				Taps:              len(result.Taps),
@@ -98,8 +91,20 @@ func RepresentativeResponses() (
 				TargetMagnitudeDB: magnitudeDB(targetSpectrum[bin]),
 				MagnitudeDB:       magnitudeDB(spectrum[bin]),
 				GroupDelay:        groupDelayAt(result.Taps, spectrum[bin], bin),
-				DelayWeight:       target.DelayWeight[bin],
+				DelayWeight:       responseTarget.DelayWeight[bin],
 			})
+		}
+	}
+
+	for _, method := range methods() {
+		result, designErr := method.design(impulseTarget)
+		if designErr != nil {
+			return nil, nil, fmt.Errorf(
+				"reference: design impulse %s/%s: %w",
+				impulseTarget.Name,
+				method.name,
+				designErr,
+			)
 		}
 
 		peak := 0.0
@@ -114,7 +119,7 @@ func RepresentativeResponses() (
 			}
 
 			impulseRows = append(impulseRows, ImpulseResponseRow{
-				Target:                target.Name,
+				Target:                impulseTarget.Name,
 				Method:                method.name,
 				SampleRate:            SampleRate,
 				Taps:                  len(result.Taps),
@@ -130,6 +135,16 @@ func RepresentativeResponses() (
 	}
 
 	return frequencyRows, impulseRows, nil
+}
+
+func findTarget(targets []Target, name string) (Target, error) {
+	for _, target := range targets {
+		if target.Name == name {
+			return target, nil
+		}
+	}
+
+	return Target{}, fmt.Errorf("reference: target %q is missing", name)
 }
 
 func realSpectrum(

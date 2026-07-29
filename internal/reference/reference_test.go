@@ -230,9 +230,12 @@ func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
 	}
 
 	peaks := 0
+	iterativeEnergy := 0.0
+	iterativePrePeakEnergy := 0.0
+	iterativeSignificantPrePeakSamples := 0
 
 	for _, row := range impulseRows {
-		if row.Target != RepresentativeTarget ||
+		if row.Target != ImpulseTarget ||
 			row.SampleRate != SampleRate ||
 			row.Taps != TapCount ||
 			row.FFTSize != FFTSize {
@@ -257,10 +260,37 @@ func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
 				)
 			}
 		}
+
+		if row.Method == "budde-iterative" {
+			energy := row.Coefficient * row.Coefficient
+			iterativeEnergy += energy
+			if row.PeakAlignedIndex < 0 {
+				iterativePrePeakEnergy += energy
+				if math.Abs(row.NormalisedCoefficient) >= 0.01 {
+					iterativeSignificantPrePeakSamples++
+				}
+			}
+		}
 	}
 
 	if peaks != methodCount {
 		t.Errorf("aligned peak count = %d, want %d", peaks, methodCount)
+	}
+
+	if ratio := iterativePrePeakEnergy / iterativeEnergy; ratio < 0.1 {
+		t.Errorf(
+			"alternating %s pre-peak energy ratio = %g, want >= 0.1",
+			ImpulseTarget,
+			ratio,
+		)
+	}
+
+	if iterativeSignificantPrePeakSamples < 8 {
+		t.Errorf(
+			"alternating %s significant pre-peak samples = %d, want >= 8",
+			ImpulseTarget,
+			iterativeSignificantPrePeakSamples,
+		)
 	}
 
 	assertCommittedResponseCSVs(t, frequencyRows, impulseRows)

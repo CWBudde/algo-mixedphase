@@ -18,6 +18,11 @@ const (
 	// Its magnitude remains meaningful across the full audio band, while its
 	// group-delay weight selects a finite band away from DC and Nyquist.
 	RepresentativeTarget = "parametric-eq"
+	// ImpulseTarget is the target used for the peak-aligned impulse plot. The
+	// crossover fixture requires the short linear-phase residual to perform
+	// meaningful shaping, unlike targets whose minimum-phase factor already
+	// fits its assigned support and leaves an almost pure delay as residual.
+	ImpulseTarget = "crossover"
 )
 
 const (

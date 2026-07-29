@@ -58,8 +58,11 @@ no measured value. The manuscript stores configuration budgets and
 mathematical constants, but no measured result value. The evidence paths are:
 
 - `docs/reference-results.csv` for cross-target scalar metrics;
-- `docs/reference-response.csv` and `docs/reference-impulse.csv` for the
-  representative realised responses; and
+- `docs/reference-response.csv` for the representative parametric-EQ frequency
+  responses;
+- `docs/reference-impulse.csv` for the first-order 1 kHz low-pass impulse
+  responses, including a regression check that the alternating result uses
+  meaningful pre-peak energy; and
 - `docs/graphiceq-results.csv` for the structure-specific latency comparison.
 
 `just compare-check` regenerates these files and requires a byte-identical
