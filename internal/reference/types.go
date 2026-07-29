@@ -33,12 +33,23 @@ const (
 	DegenerateContrastTarget = "steep-crossover"
 )
 
+// The iteration budgets the published comparison runs under. They are dials
+// rather than converged values, and they are exported so that the Mixed Phase
+// Lab can drive the same method under the same budget: a lab result is only
+// comparable to a row of docs/reference-results.csv while both agree on every
+// one of these.
 const (
-	iterativePasses       = 12
-	minimaxPasses         = 16
-	lowDelayIterations    = 80
-	lowDelayPenaltyStages = 4
-	lowDelayToleranceDB   = 2.0
+	// IterativePasses bounds the alternating factorisation's correction loop.
+	IterativePasses = 12
+	// MinimaxPasses bounds the Lawson peak-error refinement.
+	MinimaxPasses = 16
+	// LowDelayIterations bounds the direct low-group-delay optimiser.
+	LowDelayIterations = 80
+	// LowDelayPenaltyStages is the number of penalty-weight escalations that
+	// optimiser runs.
+	LowDelayPenaltyStages = 4
+	// LowDelayToleranceDB is the magnitude tolerance it is allowed to spend.
+	LowDelayToleranceDB = 2.0
 )
 
 // Target is one fixed magnitude-response fixture and the frequency weights

@@ -79,7 +79,7 @@ func methods() []designMethod {
 					mixedphase.IterativeConfig{
 						Length:     TapCount,
 						Delay:      DelayBudget,
-						Iterations: iterativePasses,
+						Iterations: IterativePasses,
 						FFTSize:    FFTSize,
 					},
 				)
@@ -107,7 +107,7 @@ func methods() []designMethod {
 						Length:            TapCount,
 						Mix:               mix,
 						FFTSize:           FFTSize,
-						MinimaxIterations: minimaxPasses,
+						MinimaxIterations: MinimaxPasses,
 						// The objective is an absolute complex deviation, so an
 						// unweighted design spends its whole budget on the
 						// passband and lets stopband depth slip. Weighting by
@@ -133,7 +133,7 @@ func methods() []designMethod {
 					mixedphase.IterativeConfig{
 						Length:     TapCount,
 						Delay:      0,
-						Iterations: iterativePasses,
+						Iterations: IterativePasses,
 						FFTSize:    FFTSize,
 					},
 				)
@@ -147,10 +147,10 @@ func methods() []designMethod {
 					mixedphase.LowGroupDelayConfig{
 						Length:        TapCount,
 						FFTSize:       FFTSize,
-						ToleranceDB:   lowDelayToleranceDB,
+						ToleranceDB:   LowDelayToleranceDB,
 						DelayWeight:   target.DelayWeight,
-						Iterations:    lowDelayIterations,
-						PenaltyStages: lowDelayPenaltyStages,
+						Iterations:    LowDelayIterations,
+						PenaltyStages: LowDelayPenaltyStages,
 					},
 				)
 			},

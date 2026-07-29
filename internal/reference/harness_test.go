@@ -378,7 +378,7 @@ func TestSteepTargetActuallyExercisesTheFactorisation(t *testing.T) {
 			mixedphase.IterativeConfig{
 				Length:     TapCount,
 				Delay:      DelayBudget,
-				Iterations: iterativePasses,
+				Iterations: IterativePasses,
 				FFTSize:    FFTSize,
 			},
 		)
