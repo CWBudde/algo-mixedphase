@@ -1,0 +1,130 @@
+:root {
+  --bg: #10141c;
+  --panel: #171d28;
+  --text: #e6eaf2;
+  --muted: #8a94a6;
+  --accent: #4f9cf9;
+  --warn: #f2a33c;
+  --grid: #2a3140;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 2rem 1.5rem 4rem;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+header,
+main {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.6rem;
+}
+
+header p {
+  margin: 0 0 2rem;
+  max-width: 62ch;
+  color: var(--muted);
+}
+
+a {
+  color: var(--accent);
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem 1.5rem;
+  padding: 1.25rem;
+  background: var(--panel);
+  border-radius: 10px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+label[hidden] {
+  display: none;
+}
+
+output {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+select,
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+select {
+  padding: 0.4rem;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--grid);
+  border-radius: 6px;
+}
+
+.metrics dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+
+.metrics dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.metrics dd {
+  margin: 0.15rem 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+figure {
+  margin: 0 0 1.5rem;
+}
+
+figcaption {
+  margin-bottom: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+canvas {
+  width: 100%;
+  height: auto;
+  background: var(--panel);
+  border-radius: 8px;
+}
+
+#status:empty {
+  display: none;
+}
+
+#status {
+  padding: 0.6rem 0.9rem;
+  background: var(--panel);
+  border-left: 3px solid var(--warn);
+  border-radius: 4px;
+  color: var(--muted);
+}

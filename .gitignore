@@ -1,0 +1,55 @@
+# Binaries and executables
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Testing and coverage
+.coverprofile
+coverage.txt
+*.prof
+
+# Dependencies
+/vendor/
+
+# IDEs and Editors
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating System
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Misc
+.env
+.env.local
+.history/
+.tmp/
+
+# DSP research/docs
+dsp/**/*.pdf
+
+# WASM build artifacts
+/wasm
+**/mixedphase_lab.wasm
+**/wasm_exec.js
+
+# AI agents
+.claude/
+.serena/
+
+# Legacy
+/legacy/

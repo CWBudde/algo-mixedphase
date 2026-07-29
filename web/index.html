@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mixed Phase Lab</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Mixed Phase Lab</h1>
+      <p>
+        Every filter spends its delay budget somewhere. Move the delay control and watch
+        where the energy goes — into pre-ringing ahead of the peak, or into phase
+        distortion around it.
+        <a href="https://github.com/cwbudde/algo-mixedphase">algo-mixedphase</a>
+      </p>
+    </header>
+
+    <main>
+      <section class="controls" aria-label="Design controls">
+        <label>
+          Method
+          <select id="method">
+            <option value="iterative">Alternating factorisation (DAGA 2012)</option>
+            <option value="interpolation">Phase interpolation</option>
+            <option value="minimax">Complex least squares + minimax</option>
+            <option value="lowdelay">Low group delay (magnitude-constrained)</option>
+          </select>
+        </label>
+
+        <label>
+          Taps <output id="lengthValue">129</output>
+          <input id="length" type="range" min="33" max="257" step="8" value="129" />
+        </label>
+
+        <label>
+          Cutoff <output id="cutoffValue">0.08</output>
+          <input id="cutoff" type="range" min="0.02" max="0.4" step="0.01" value="0.08" />
+        </label>
+
+        <label data-for="delay">
+          Delay (samples) <output id="delayValue">8</output>
+          <input id="delay" type="range" min="0" max="64" step="1" value="8" />
+        </label>
+
+        <label data-for="tolerance" hidden>
+          Magnitude tolerance (dB) <output id="toleranceValue">1</output>
+          <input
+            id="tolerance"
+            type="range"
+            min="0.1"
+            max="12"
+            step="0.1"
+            value="1"
+          />
+        </label>
+
+        <label>
+          Iterations <output id="iterationsValue">12</output>
+          <input id="iterations" type="range" min="1" max="120" step="1" value="12" />
+        </label>
+      </section>
+
+      <section class="metrics" aria-label="Metrics">
+        <dl>
+          <div><dt>RMS magnitude error</dt><dd id="rms">–</dd></div>
+          <div><dt>Peak magnitude error</dt><dd id="peak">–</dd></div>
+          <div><dt>Energy centroid</dt><dd id="centroid">–</dd></div>
+          <div><dt>Energy before peak</dt><dd id="prepeak">–</dd></div>
+          <div><dt>Iterations run</dt><dd id="iterationsRun">–</dd></div>
+        </dl>
+      </section>
+
+      <section class="plots">
+        <figure>
+          <figcaption>Magnitude (dB) — design in colour, prototype dashed</figcaption>
+          <canvas id="magnitude" width="900" height="260"></canvas>
+        </figure>
+        <figure>
+          <figcaption>Group delay (samples)</figcaption>
+          <canvas id="groupDelay" width="900" height="200"></canvas>
+        </figure>
+        <figure>
+          <figcaption>
+            Impulse response — the bar marks the peak; everything left of it is
+            pre-ringing
+          </figcaption>
+          <canvas id="impulse" width="900" height="200"></canvas>
+        </figure>
+      </section>
+
+      <p id="status" role="status">Loading WebAssembly…</p>
+    </main>
+
+    <script src="wasm_exec.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

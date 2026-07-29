@@ -1,0 +1,112 @@
+# algo-mixedphase
+
+Mixed-phase FIR filter design in Go, and a reproducible comparison of the methods that
+produce it. This repository is the software companion to Christian-W. Budde's DAGA 2012
+paper on fixed-support mixed-phase filter design (see [docs/paper](docs/paper/)).
+
+**Module**: `github.com/cwbudde/algo-mixedphase`
+
+Every filter has to spend its delay budget somewhere. A linear-phase FIR spends all of it
+and pays with pre-ringing; a minimum-phase FIR spends almost none and pays with phase
+distortion. The interesting designs live in between, and this repository implements four
+ways of getting there — then measures them against each other under identical tap budgets,
+delay constraints, target samples and frequency weights.
+
+## Packages
+
+| Package      | Description                                                                                                                                                                                                                                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mixedphase` | Fixed-length mixed-phase FIR design: DAGA 2012 alternating factorisation, direct phase-interpolation baseline, weighted complex least squares with Lawson minimax refinement, direct low-group-delay optimisation (Wu–Gao–Teo), cepstral and discrete-Hilbert minimum-phase reconstruction, and comparison metrics |
+| `graphiceq`  | Low-latency octave graphic EQ after Bruschi–Välimäki–Liski–Cecchi (DAFx 2022): the lowest bands become a cascade of shelving biquads and the rest one linear-phase FIR, halving latency per offloaded band                                                                                                         |
+
+`graphiceq` is deliberately _not_ part of the general mixed-phase API. It answers the same
+question — how to buy latency back — but only for targets that are a set of band gains, by
+changing the filter structure rather than its phase.
+
+## Quick Start
+
+```bash
+go get github.com/cwbudde/algo-mixedphase@latest
+```
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/cwbudde/algo-mixedphase/mixedphase"
+)
+
+func main() {
+	prototype := []float64{ /* linear-phase prototype impulse response */ }
+
+	result, err := mixedphase.DesignIterative(prototype, mixedphase.IterativeConfig{
+		Length: 65,
+		Delay:  8, // samples of the 32 a linear-phase design would need
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(result.Metrics.RMSMagnitudeErrorDB, result.Metrics.EnergyCentroid)
+}
+```
+
+## Comparing the methods
+
+The two examples print CSV, one row per method, so results can be diffed across changes:
+
+```bash
+just compare           # or: go run ./examples/mixedphase && go run ./examples/graphiceq
+```
+
+`examples/graphiceq` prints each hybrid split next to an all-FIR design forced to the same
+tap count, which is the comparison that actually decides whether the split is worth taking:
+
+```
+method,iir_bands,taps,latency,rms_error_db,max_error_db
+hybrid,0,3073,1536,0.014209,0.579788
+hybrid,2,769,384,0.024067,0.477574
+all-fir-equal-latency,0,769,384,0.113490,2.665199
+```
+
+See [docs/MIXED_PHASE_FILTER_DESIGN.md](docs/MIXED_PHASE_FILTER_DESIGN.md) for the
+methods, the measured trade-offs, and the failure modes each one has.
+
+## Relationship to algo-dsp
+
+This repository builds on [`algo-dsp`](https://github.com/cwbudde/algo-dsp) — windows,
+convolution, spectrum utilities, biquad runtime and biquad designers — and on
+[`algo-fft`](https://github.com/cwbudde/algo-fft) for transforms. It depends on the public
+algo-dsp API only; nothing is duplicated here.
+
+The split is one of purpose. algo-dsp is a general-purpose, production-quality DSP library
+heading for a stable v1.0. This repository is a research companion: it carries a paper, a
+comparison harness, an interactive lab, and a roadmap that is driven by which method to
+try next rather than by API stability.
+
+## Development
+
+Requirements: Go 1.25+, `just` (optional)
+
+```bash
+just test       # Run all tests
+just test-race  # Run tests with race detector
+just lint       # Run golangci-lint
+just fmt        # Format code
+just bench      # Run benchmarks
+just ci         # Run all CI checks
+just web-demo   # Build and serve the Mixed Phase Lab locally
+```
+
+## Project Docs
+
+- [PLAN.md](PLAN.md) -- roadmap
+- [CHANGELOG.md](CHANGELOG.md) -- release notes
+- [docs/MIXED_PHASE_FILTER_DESIGN.md](docs/MIXED_PHASE_FILTER_DESIGN.md) -- method notes and measurements
+- [docs/paper](docs/paper/) -- the paper this work accompanies
+
+## License
+
+See [LICENSE](LICENSE).
