@@ -12,7 +12,10 @@ just paper
 ```
 
 The result is `docs/paper/mixed-phase-filter-design-en.pdf`. It is ignored by Git because
-CI builds and uploads the same PDF as an artifact. During editing, use:
+CI builds and uploads the same PDF as an artifact. A `v*` tag also creates a GitHub release
+and attaches that exact CI artifact as
+[`mixed-phase-filter-design-en.pdf`][paper-pdf]; the binary is never maintained by hand.
+During editing, use:
 
 ```bash
 just paper-watch
@@ -74,6 +77,16 @@ CSVs are byte-compared against fresh generator output by the reference tests. Th
 quality data deliberately contain no wall-clock values; those live separately in
 `docs/reference-timings.csv`.
 
+The paper gives failure cases their own numbered table rather than leaving them as scattered
+caveats. Correction-loop instability, optimiser initialisation sensitivity, zero-weight
+bins, stopband group-delay masking, and the hybrid graphic-EQ target-class limit each map to
+a named regression test in the reproducibility appendix.
+
+The completed editorial audit is recorded in
+[`TECHNICAL_REVIEW.md`](TECHNICAL_REVIEW.md). It checks historical attribution against the
+German original, API and algorithm statements against the Go implementation, and every
+new result against the committed comparison artifacts.
+
 ## Layout reference
 
 The document uses an AES-informed author-manuscript layout: a full-width title and abstract,
@@ -91,3 +104,4 @@ in the published AES style.
 [aes-convention]: https://secure.aes.org/authors/guidelines/
 [aes-journal]: https://aes.org/publications/journal-of-the-audio-engineering-society/journal-author-guidelines/
 [aes-policy]: https://aes.org/publications/publications-policy/
+[paper-pdf]: https://github.com/cwbudde/algo-mixedphase/releases/latest/download/mixed-phase-filter-design-en.pdf

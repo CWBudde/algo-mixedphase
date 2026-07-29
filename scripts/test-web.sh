@@ -12,9 +12,11 @@ CHROME_PID=
 cleanup() {
 	if [ -n "$CHROME_PID" ]; then
 		kill "$CHROME_PID" 2>/dev/null || true
+		wait "$CHROME_PID" 2>/dev/null || true
 	fi
 	if [ -n "$SERVER_PID" ]; then
 		kill "$SERVER_PID" 2>/dev/null || true
+		wait "$SERVER_PID" 2>/dev/null || true
 	fi
 	rm -rf "$TEMP_DIR"
 }

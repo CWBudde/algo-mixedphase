@@ -2,7 +2,9 @@
 
 Mixed-phase FIR filter design in Go, and a reproducible comparison of the methods that
 produce it. This repository is the software companion to Christian-W. Budde's DAGA 2012
-paper on fixed-support mixed-phase filter design (see [docs/paper](docs/paper/)).
+paper on fixed-support mixed-phase filter design. Read the
+[revised English paper (PDF)][paper-pdf] or browse its
+[Typst sources](docs/paper/).
 
 **Module**: `github.com/cwbudde/algo-mixedphase`
 
@@ -132,8 +134,11 @@ just paper-watch # Rebuild the paper while editing
 - [PLAN.md](PLAN.md) -- roadmap
 - [CHANGELOG.md](CHANGELOG.md) -- release notes
 - [docs/MIXED_PHASE_FILTER_DESIGN.md](docs/MIXED_PHASE_FILTER_DESIGN.md) -- method notes and measurements
-- [docs/paper](docs/paper/) -- the paper this work accompanies
+- [Revised English paper (PDF)][paper-pdf] -- CI-built asset from the latest tagged release
+- [docs/paper](docs/paper/) -- canonical Typst sources and build notes
 
 ## License
 
 See [LICENSE](LICENSE).
+
+[paper-pdf]: https://github.com/cwbudde/algo-mixedphase/releases/latest/download/mixed-phase-filter-design-en.pdf

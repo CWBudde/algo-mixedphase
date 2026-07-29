@@ -95,6 +95,7 @@ const initial = JSON.parse(
       !document.querySelector("#exportData").disabled &&
       !document.querySelector("#exportCSV").disabled,
     metricsComplete: !document.querySelector("#metricsBody").textContent.includes("…"),
+    paperHref: document.querySelector("[data-paper-link]").href,
     noOverflow: document.documentElement.scrollWidth <= window.innerWidth
   })`),
 );
@@ -105,6 +106,8 @@ assert.deepEqual(initial, {
   bMethod: "interpolation",
   exportsEnabled: true,
   metricsComplete: true,
+  paperHref:
+    "https://github.com/cwbudde/algo-mixedphase/releases/latest/download/mixed-phase-filter-design-en.pdf",
   noOverflow: true,
 });
 

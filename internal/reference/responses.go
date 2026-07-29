@@ -171,6 +171,7 @@ func groupDelayAt(
 
 	denominator := cmplx.Abs(response)
 	denominator *= denominator
+
 	if denominator < coefficientFloor {
 		return 0
 	}

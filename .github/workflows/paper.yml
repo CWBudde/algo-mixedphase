@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -47,3 +49,24 @@ jobs:
           name: mixed-phase-filter-design-en
           path: docs/paper/mixed-phase-filter-design-en.pdf
           if-no-files-found: error
+
+  release:
+    name: Attach paper to tagged release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download CI-built paper
+        uses: actions/download-artifact@v4
+        with:
+          name: mixed-phase-filter-design-en
+          path: release
+
+      - name: Create release and attach paper
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/mixed-phase-filter-design-en.pdf
+          fail_on_unmatched_files: true
+          generate_release_notes: true

@@ -2,8 +2,9 @@
 
 This document turns Christian-W. Budde's DAGA 2012 paper,
 [“Gemischtphasige Filter”][budde-2012], into an implementation and research
-roadmap for this repository. It builds on `algo-dsp` for the underlying DSP
-primitives and on `algo-fft` for transforms.
+roadmap for this repository. The [`revised English paper`][paper-pdf] presents
+the reviewed argument and data-backed figures. The implementation builds on
+`algo-dsp` for the underlying DSP primitives and on `algo-fft` for transforms.
 
 ## The actual design problem
 
@@ -396,6 +397,7 @@ literature search, not a patent or formal novelty search.
 [lee-2006]: https://doi.org/10.1109/TSP.2006.872542
 [olivier-2022]: https://doi.org/10.1049/sil2.12166
 [openair-room]: https://github.com/Mu-Y/RoomIR-equalizer/blob/master/r8-omni-conf_b.wav
+[paper-pdf]: https://github.com/cwbudde/algo-mixedphase/releases/latest/download/mixed-phase-filter-design-en.pdf
 [potchinkov-1995]: https://doi.org/10.1016/0165-1684(95)00077-Q
 [wu-2013]: https://doi.org/10.1016/j.sigpro.2013.01.015
 [yan-ma-2004]: https://doi.org/10.1016/j.dsp.2004.08.003

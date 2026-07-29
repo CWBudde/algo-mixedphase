@@ -36,6 +36,10 @@ among source, A, and B changes gains without restarting playback.
 Every control is encoded in the URL. The export actions save either both tap sets and their
 metrics as JSON or the plotted responses as CSV.
 
+The footer links to the implementation notes and to the CI-built PDF attached to the latest
+tagged release. The browser smoke test pins that release-asset URL so it remains independent
+of whether the site was built from `main` or a tag.
+
 The default prototype matches `examples/mixedphase`, so a setting in the lab and a row in
 the native comparison describe the same filter. `DesignIterative` treats the iteration
 control as a maximum: at delay 8 the first rising pass is discarded, so the default budget

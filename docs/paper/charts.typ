@@ -56,6 +56,24 @@
   "Low group delay"
 }
 
+#let reference-targets = (
+  "low-pass",
+  "parametric-eq",
+  "crossover",
+  "deep-notch",
+  "room-correction",
+)
+
+#let cross-target-win-count(rows, method, key) = {
+  let wins = reference-targets.filter(target => {
+    let target-rows = rows.filter(row => row.at("target") == target)
+    let method-row = target-rows.find(row => row.at("method") == method)
+    let value = float(method-row.at(key))
+    target-rows.all(row => value <= float(row.at(key)))
+  })
+  wins.len()
+}
+
 #let method-dash(method) = if method == "budde-iterative" {
   none
 } else if method == "phase-interpolation" {
@@ -795,5 +813,49 @@
       [Method], [Rel. err.\ (%)], [RMS (dB)], [Delay], [Pre-peak (\%)], [$P$]
     ),
     ..cells,
+  )
+}
+
+#let cross-target-summary-table(rows) = {
+  let win(method, key) = cross-target-win-count(rows, method, key)
+  table(
+    columns: (1.45fr, 0.52fr, 0.52fr, 0.52fr, 0.52fr),
+    align: (left, center, center, center, center),
+    table.header(
+      [Criterion],
+      [Alternating],
+      [Phase interpolation],
+      [Complex minimax],
+      [Low group delay],
+    ),
+    [Lowest relative magnitude error],
+    [#win("budde-iterative", "relative_magnitude_error")],
+    [#win("phase-interpolation", "relative_magnitude_error")],
+    [#win("complex-minimax", "relative_magnitude_error")],
+    [#win("low-group-delay", "relative_magnitude_error")],
+
+    [Lowest RMS magnitude error],
+    [#win("budde-iterative", "rms_magnitude_error_db")],
+    [#win("phase-interpolation", "rms_magnitude_error_db")],
+    [#win("complex-minimax", "rms_magnitude_error_db")],
+    [#win("low-group-delay", "rms_magnitude_error_db")],
+
+    [Lowest mean group delay],
+    [#win("budde-iterative", "mean_group_delay")],
+    [#win("phase-interpolation", "mean_group_delay")],
+    [#win("complex-minimax", "mean_group_delay")],
+    [#win("low-group-delay", "mean_group_delay")],
+
+    [Least pre-peak energy],
+    [#win("budde-iterative", "pre_peak_energy_ratio")],
+    [#win("phase-interpolation", "pre_peak_energy_ratio")],
+    [#win("complex-minimax", "pre_peak_energy_ratio")],
+    [#win("low-group-delay", "pre_peak_energy_ratio")],
+
+    [Smallest coefficient range],
+    [#win("budde-iterative", "coefficient_range_db")],
+    [#win("phase-interpolation", "coefficient_range_db")],
+    [#win("complex-minimax", "coefficient_range_db")],
+    [#win("low-group-delay", "coefficient_range_db")],
   )
 }

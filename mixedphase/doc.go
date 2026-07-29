@@ -87,6 +87,20 @@
 // evaluations per penalty stage, so a large FFT size is expensive in a way it
 // is not for the transform-based methods.
 //
+// # Group-delay measurement limits
+//
+// Group delay is not a meaningful whole-band metric when the response contains
+// deep stopbands or spectral nulls. Phase is numerically fragile as magnitude
+// approaches zero, so differentiating it there can produce arbitrarily large
+// values that describe neither audible energy nor useful latency.
+//
+// [DesignLowGroupDelay] therefore uses squared target magnitude as its default
+// delay weight, which suppresses stopbands and masks exact target nulls.
+// [GroupDelayMetrics.Peak] likewise ignores bins below the documented weight
+// threshold. Comparisons should state the evaluated frequency band and weight;
+// an unmasked stopband group-delay curve is not evidence for or against a
+// design.
+//
 // # Conditioning of the alternating factorisation
 //
 // The [DesignIterative] updates are not a contraction. On the 129-tap,

@@ -280,6 +280,32 @@ func TestLowGroupDelayWeightSelectsBand(t *testing.T) {
 	}
 }
 
+// TestDefaultDelayWeightMasksSpectralNulls guards the measurement policy used
+// by the low-delay objective. Group delay is numerically fragile where the
+// target magnitude vanishes, so the default squared-magnitude weight must
+// remove exact spectral nulls and emphasise bins that pass energy.
+func TestDefaultDelayWeightMasksSpectralNulls(t *testing.T) {
+	target := []float64{1, 0.5, 0}
+
+	weight, err := delayWeights(nil, target)
+	if err != nil {
+		t.Fatalf("delayWeights() error = %v", err)
+	}
+
+	if weight[2] != 0 {
+		t.Fatalf("weight at spectral null = %g, want 0", weight[2])
+	}
+
+	if weight[0] <= weight[1] {
+		t.Fatalf(
+			"weight at unit magnitude = %g, at half magnitude = %g, "+
+				"want the stronger response to carry more weight",
+			weight[0],
+			weight[1],
+		)
+	}
+}
+
 // TestLowGroupDelayNegativeIterationsReturnsStart gives callers a way to
 // measure the starting point through the same reporting path.
 func TestLowGroupDelayNegativeIterationsReturnsStart(t *testing.T) {

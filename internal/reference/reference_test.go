@@ -198,6 +198,7 @@ func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
 	}
 
 	weightedRows := 0
+
 	for _, row := range frequencyRows {
 		if row.Target != RepresentativeTarget ||
 			row.SampleRate != SampleRate ||
@@ -229,6 +230,7 @@ func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
 	}
 
 	peaks := 0
+
 	for _, row := range impulseRows {
 		if row.Target != RepresentativeTarget ||
 			row.SampleRate != SampleRate ||
@@ -246,6 +248,7 @@ func TestRepresentativeResponsesCoverRealisedDesigns(t *testing.T) {
 
 		if row.PeakAlignedIndex == 0 {
 			peaks++
+
 			if math.Abs(math.Abs(row.NormalisedCoefficient)-1) > 1e-12 {
 				t.Errorf(
 					"%s aligned peak = %g, want unit magnitude",

@@ -1,7 +1,7 @@
 #import "charts.typ": (
-  accuracy-delay-chart, graphiceq-chart, group-delay-response-chart,
-  magnitude-response-chart, peak-aligned-impulse-chart, pre-ringing-chart,
-  representative-results-table,
+  accuracy-delay-chart, cross-target-summary-table, cross-target-win-count,
+  graphiceq-chart, group-delay-response-chart, magnitude-response-chart,
+  peak-aligned-impulse-chart, pre-ringing-chart, representative-results-table,
 )
 #import "style.typ": code-path, paper
 
@@ -32,10 +32,11 @@
     artifact.
   ],
   status-body: [
-    This is a working English revision. The boundary between the 2012
+    This is a reviewed English author manuscript. The boundary between the 2012
     contribution and later repository work has been audited against the
     original paper. Its charts are generated from committed reference CSVs;
-    the full cross-target argument and final conclusions remain open.
+    the tagged PDF is generated and attached by the repository release
+    workflow.
   ],
 )
 
@@ -363,6 +364,64 @@ The alternating crossover result has substantial energy ahead of its peak,
 while several equaliser and notch cases concentrate almost all energy at or
 after the peak. The paper therefore reports both delay and energy distribution.
 
+== Cross-target interpretation
+
+@cross-target-summary counts the lowest value in each metric across the five
+fixed targets. The counts are computed from the committed CSV during the paper
+build; they are descriptive comparisons under the stated common budget, not
+proof that metrics with different objectives are interchangeable.
+
+#figure(
+  text(size: 7.4pt)[
+    #cross-target-summary-table(reference-results)
+  ],
+  caption: [
+    Number of the five reference targets on which each method has the lowest
+    value for the named realised-response metric. Ties, if present, count for
+    every tied method. All cells are calculated directly from
+    #code-path("docs/reference-results.csv") under the budget of
+    @accuracy-delay.
+  ],
+) <cross-target-summary>
+
+The alternating construction has the lowest relative magnitude error on
+#cross-target-win-count(
+  reference-results,
+  "budde-iterative",
+  "relative_magnitude_error",
+) of five targets and the lowest RMS magnitude error on
+#cross-target-win-count(
+  reference-results,
+  "budde-iterative",
+  "rms_magnitude_error_db",
+) of five. The low-group-delay optimiser records the lowest mean delay on
+#cross-target-win-count(
+  reference-results,
+  "low-group-delay",
+  "mean_group_delay",
+) of five targets and the smallest coefficient range on
+#cross-target-win-count(
+  reference-results,
+  "low-group-delay",
+  "coefficient_range_db",
+) of five, but it achieves this by solving a different problem with a
+2 dB magnitude constraint. It also has the least pre-peak energy on
+#cross-target-win-count(
+  reference-results,
+  "low-group-delay",
+  "pre_peak_energy_ratio",
+) of five; the low-pass exception shows that the lowest mean delay need not
+minimise ringing before the largest coefficient.
+
+Complex minimax has no aggregate win in these magnitude-only columns. That is
+not a failure of its stated objective: Lawson reweighting controls peak complex
+error, and in the deep-notch case it improves both RMS and maximum dB error over
+direct phase interpolation. These cross-target results therefore support a
+conditional selection rule: use alternating correction when fixed-support
+magnitude fidelity is primary, direct low-delay optimisation when delay and
+coefficient range justify a magnitude tolerance, and complex weighting when
+the complex-response norm or band priorities are the actual specification.
+
 == Representative realised responses
 
 The parametric-EQ case exposes the shape behind the scalar metrics without the
@@ -470,6 +529,89 @@ RMS error than the shortened all-FIR alternative. This does not generalise to
 arbitrary targets: the shelf cascade cannot reproduce a rapidly alternating
 octave-band “zigzag” without large interaction error.
 
+= Failure modes and validity limits <failure-modes>
+
+The successful cases above are conditional results, not guarantees outside
+their stated targets and weights. @failure-mode-table gives each known failure
+mode an observable symptom and a required reporting or design control. These
+cases are regression-tested alongside the successful cases; a design should
+not be selected from the aggregate trade-off plots without checking the
+corresponding row.
+
+#figure(
+  text(size: 7.25pt)[
+    #table(
+      columns: (0.72fr, 1.08fr, 1.2fr),
+      align: (left, left, left),
+      table.header(
+        [*Method or metric*],
+        [*Observable failure*],
+        [*Control and interpretation*],
+      ),
+      [Alternating correction],
+      [
+        A later correction pass can raise realised RMS magnitude error and
+        amplify platform rounding.
+      ],
+      [
+        Treat the pass count as a maximum; reject the first rising candidate
+        and report accepted passes.
+      ],
+
+      [Low-delay optimisation],
+      [
+        A linear-phase start can remain in a substantially worse local basin
+        than the default minimum-phase start.
+      ],
+      [
+        State #code-path("InitialTaps") and optimisation budgets; compare
+        starts when the basin matters.
+      ],
+
+      [Weighted complex fit],
+      [
+        Bins assigned exactly zero weight can diverge while the weighted band
+        remains accurately fitted.
+      ],
+      [
+        Prefer weak positive weights to omitted bands and inspect the realised
+        response over the full application band.
+      ],
+
+      [Group-delay metric],
+      [
+        Near a spectral null, phase differentiation is numerically fragile and
+        can dominate a whole-band delay statistic.
+      ],
+      [
+        Mask or downweight deep stopbands; publish the evaluated band and
+        weight, as in @representative-group-delay.
+      ],
+
+      [Hybrid graphic EQ],
+      [
+        Rapidly alternating octave gains do not fit the smooth low-shelf
+        cascade and leave large interaction error.
+      ],
+      [
+        Offload only a smooth low-frequency region; retain the all-FIR
+        structure for zigzag-like targets.
+      ],
+    )
+  ],
+  caption: [
+    Failure modes, observable symptoms, and required controls. The entries are
+    qualitative; their executable regression evidence is mapped in the
+    reproducibility appendix.
+  ],
+) <failure-mode-table>
+
+The first three rows are algorithmic limitations: stopping, initialisation, or
+weighting changes the solution. The fourth is a measurement limitation and
+must not be mistaken for filter latency. The fifth is a target-class
+limitation: the hybrid result in @graphiceq-tradeoff applies to smooth
+low-frequency band trajectories, not arbitrary graphic-EQ gain sequences.
+
 = Reproducibility appendix
 
 This appendix covers every public design algorithm and every numbered equation,
@@ -576,6 +718,14 @@ revision shown on the title page.
     accepted counts, not maxima. _Reproduce:_ `just compare-check`; rebuild
     with `just paper`.
 
+  - *@cross-target-summary.* _Generator:_ the
+    #code-path("cross-target-summary-table") Typst helper computes every count
+    from #code-path("docs/reference-results.csv"). _Evidence:_ the artifact is
+    byte-compared by #code-path("TestRunCoversEveryMethodAndMetric"). _Budget:_
+    the five-target common reference budget listed under “Common realised-
+    response analysis”; no summary value is stored in the Typst source.
+    _Reproduce:_ `just compare-check`; rebuild with `just paper`.
+
   - *@representative-magnitude, @representative-group-delay,
       @representative-impulse, and @representative-results.* _Generator:_
     #code-path("internal/reference.RepresentativeResponses"), invoked by
@@ -596,6 +746,19 @@ revision shown on the title page.
     #code-path("Length") equals the hybrid tap count. _Budget:_ the graphic-EQ
     configuration listed above. _Reproduce:_ `just compare-check`; rebuild
     with `just paper`.
+
+  - *@failure-mode-table.* _Implementation and evidence:_ correction-loop
+    instability is guarded by
+    #code-path("TestIterativeStopsBeforeRisingError") and
+    #code-path("TestIterativeConditioning"); initialisation sensitivity by
+    #code-path("TestLowGroupDelayDependsOnInitialisation"); zero-weight bins by
+    #code-path("TestUnweightedBandsAreUnconstrained"); stopband-delay masking by
+    #code-path("TestDefaultDelayWeightMasksSpectralNulls") and
+    #code-path("mixedphase.delayWeights"); and the graphic-EQ target-class limit
+    by #code-path("TestZigzagTargetDefeatsTheSplit"). _Budget:_ each named test
+    owns and asserts its deterministic fixture; the table introduces no
+    hand-entered numerical result. _Reproduce:_ `go test ./mixedphase`;
+    `go test ./graphiceq`; rebuild with `just paper`.
 ]
 
 The Typst source, bibliography, generated figure inputs, and build workflow
@@ -605,12 +768,12 @@ committed CSV fields directly.
 
 = Limitations and open work
 
-The current draft intentionally leaves three conclusions open. First, the
-committed benchmark suite still requires a final cross-target interpretation
-that gives failure cases equal prominence. Second, the original 2012 figures
-have not been reconstructed from machine-readable data. Third, perceptual
-evaluation is limited to objective pre-ringing and delay proxies; controlled
-listening tests are outside the present scope.
+The comparison is limited to five fixed targets, one 129-tap output budget,
+and the stated optimiser budgets; it does not establish asymptotic convergence
+or perceptual preference. The original 2012 figures have not been reconstructed
+from machine-readable data. Perceptual evaluation is limited to objective
+pre-ringing and delay proxies; controlled listening tests are outside the
+present scope.
 
 = Conclusion
 
@@ -624,10 +787,10 @@ revision.
 More broadly, mixed-phase FIR design is not one optimisation problem but a
 family of choices about which phase information to preserve, which error to
 minimise, and how to spend finite support. This revision makes those choices
-and their provenance explicit and binds its new evidence to executable designs.
-Final comparative conclusions will follow after the full cross-target and
-failure-mode analysis has been technically reviewed.
-
-#colbreak()
+and their provenance explicit and binds its new evidence to executable
+designs. Across the fixed reference suite, alternating correction is the
+consistent relative-magnitude choice, while the phase-free optimiser is the
+consistent mean-delay choice; neither conclusion extends beyond the stated
+targets, weights, and budgets.
 
 #bibliography("references.bib", style: "ieee", title: "References")

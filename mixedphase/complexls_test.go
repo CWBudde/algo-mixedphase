@@ -452,6 +452,15 @@ func TestUnweightedBandsAreUnconstrained(t *testing.T) {
 	if inBand > 1e-2 {
 		t.Fatalf("weighted-band peak error = %g, want <= 1e-2", inBand)
 	}
+
+	if result.ComplexError.Peak < 100*inBand {
+		t.Fatalf(
+			"overall peak error = %g, weighted-band peak = %g, want the "+
+				"unconstrained region to be at least two orders worse",
+			result.ComplexError.Peak,
+			inBand,
+		)
+	}
 }
 
 func TestComplexLeastSquaresValidation(t *testing.T) {

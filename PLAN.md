@@ -155,12 +155,12 @@ Paper and evidence:
       reproducibility appendix mapping each algorithm, numbered result, figure, and table
       to its implementation, test or Phase 3 CSV, configuration budget, and regeneration
       command.
-- [ ] Complete the plots and result tables from the committed Phase 3 data; do not
+- [x] Complete the plots and result tables from the committed Phase 3 data; do not
       hand-edit values into Typst. Add representative magnitude, group-delay, and
       peak-aligned impulse-response figures, then record tap counts, delay constraints,
       frequency grids, weights, tolerances, iteration limits, and the repository commit in
       the paper metadata or captions.
-- [ ] Give failure modes the same visibility as successful cases: correction-loop
+- [x] Give failure modes the same visibility as successful cases: correction-loop
       instability, optimiser initialisation sensitivity, zero-weight bins, unreliable
       stopband group delay, and target classes that do not fit the hybrid graphic-EQ
       structure.
