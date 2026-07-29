@@ -4,18 +4,11 @@
 package main
 
 import (
-	"math"
-	"math/cmplx"
 	"syscall/js"
 
 	"github.com/cwbudde/algo-mixedphase/graphiceq"
 	"github.com/cwbudde/algo-mixedphase/mixedphase"
 )
-
-// responsePoints is the number of frequency points the plots receive. It is
-// independent of the design grid: the curves are evaluated directly from the
-// taps, so the lab shows the filter that would run, not the design grid.
-const responsePoints = 512
 
 func main() {
 	api := js.Global().Get("Object").New()
@@ -158,84 +151,6 @@ func designGraphicEQ(args []js.Value) any {
 	out.Set("bandErrorDB", floatArray(result.Metrics.BandErrorDB))
 
 	return out
-}
-
-// plottedResponse holds the curves the lab draws.
-type plottedResponse struct {
-	magnitudeDB []float64
-	groupDelay  []float64
-}
-
-// newResponse evaluates taps on a uniform grid from DC to Nyquist. The group
-// delay comes from the phase difference between neighbouring points, which is
-// adequate here because the grid is dense relative to the filter length.
-func newResponse(taps []float64) plottedResponse {
-	magnitudeDB := make([]float64, responsePoints)
-	phase := make([]float64, responsePoints)
-
-	for k := range responsePoints {
-		omega := math.Pi * float64(k) / float64(responsePoints-1)
-		sum := complex(0, 0)
-
-		for n, tap := range taps {
-			sum += complex(tap, 0) * cmplx.Exp(complex(0, -omega*float64(n)))
-		}
-
-		magnitudeDB[k] = 20 * math.Log10(max(cmplx.Abs(sum), 1e-12))
-		phase[k] = cmplx.Phase(sum)
-	}
-
-	groupDelay := make([]float64, responsePoints)
-	step := math.Pi / float64(responsePoints-1)
-
-	for k := range responsePoints {
-		lower := max(k-1, 0)
-		upper := min(k+1, responsePoints-1)
-		difference := unwrap(phase[upper] - phase[lower])
-		groupDelay[k] = -difference / (step * float64(upper-lower))
-	}
-
-	return plottedResponse{magnitudeDB: magnitudeDB, groupDelay: groupDelay}
-}
-
-// unwrap folds a phase difference into (-pi, pi].
-func unwrap(difference float64) float64 {
-	for difference > math.Pi {
-		difference -= 2 * math.Pi
-	}
-
-	for difference <= -math.Pi {
-		difference += 2 * math.Pi
-	}
-
-	return difference
-}
-
-// lowpassPrototype builds the Hann-windowed sinc used as the design target. It
-// matches the prototype in examples/mixedphase, so lab and CSV agree.
-func lowpassPrototype(length int, cutoff float64) []float64 {
-	taps := make([]float64, length)
-	middle := float64(length-1) / 2
-	sum := 0.0
-
-	for i := range taps {
-		x := float64(i) - middle
-
-		sinc := 2 * cutoff
-		if x != 0 {
-			sinc = math.Sin(2*math.Pi*cutoff*x) / (math.Pi * x)
-		}
-
-		windowValue := 0.5 - 0.5*math.Cos(2*math.Pi*float64(i)/float64(length-1))
-		taps[i] = sinc * windowValue
-		sum += taps[i]
-	}
-
-	for i := range taps {
-		taps[i] /= sum
-	}
-
-	return taps
 }
 
 func export(fn func(args []js.Value) any) js.Func {

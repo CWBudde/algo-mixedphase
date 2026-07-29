@@ -38,6 +38,18 @@ The original German contribution, [“Gemischtphasige Filter”][original], rema
 historical source. It is linked rather than copied here until its redistribution terms have
 been confirmed.
 
+## Editorial provenance
+
+The English manuscript is a revision, not a translation. It attributes the latency-budget
+motivation, two-factor minimum/linear-phase cascade, truncation compensation, and
+alternating correction to the 2012 paper. Exact convolution-length accounting, regularised
+division, concrete reconstruction and stopping policies, comparison methods, failure
+analysis, and benchmark results are explicitly identified as later repository work.
+
+The minimum/maximum-phase split, frequency-dependent weighting, and three-factor
+decomposition mentioned in the original are reported as proposed extensions, not as
+implemented or evaluated 2012 results.
+
 ## Keeping paper and code in step
 
 The point of this repository is that the paper's claims are re-runnable. When a figure or

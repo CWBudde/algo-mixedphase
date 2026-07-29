@@ -14,19 +14,22 @@
     Linear-phase finite impulse response filters offer constant group delay but
     spend half their support before the impulse-response centre. Minimum-phase
     filters minimise delay but accept frequency-dependent phase. This paper
-    revisits an alternating factorisation proposed at DAGA 2012 that divides a
-    fixed support between minimum- and linear-phase factors. The revised
-    treatment makes the support and stopping rules explicit and places the
-    method beside phase interpolation, weighted complex approximation, direct
-    low-group-delay optimisation, and a structure-specific hybrid graphic
-    equaliser. All implementations and measurements are maintained in a public
-    Go repository so that each quantitative claim can be traced to a test or a
-    committed comparison artifact.
+    revisits an alternating factorisation proposed at DAGA 2012 that combines
+    minimum- and linear-phase factors. It distinguishes that historical
+    construction from the exact support convention, numerical safeguards,
+    stopping rule, comparison methods, and evaluation protocol introduced by
+    the present revision. The later comparison covers phase interpolation,
+    weighted complex approximation, direct low-group-delay optimisation, and a
+    structure-specific hybrid graphic equaliser. All implementations and
+    measurements are maintained in a public Go repository so that each
+    quantitative claim can be traced to a test or a committed comparison
+    artifact.
   ],
   status-body: [
-    This is a working English revision. Its charts are generated from the
-    committed reference CSVs during the Typst build. The full cross-target
-    argument and audited conclusions remain open.
+    This is a working English revision. The boundary between the 2012
+    contribution and later repository work has been audited against the
+    original paper. Its charts are generated from committed reference CSVs;
+    the full cross-target argument and final conclusions remain open.
   ],
 )
 
@@ -41,28 +44,50 @@ frequency-dependent group delay. In applications with a finite latency budget,
 the useful design space lies between these endpoints.
 
 The DAGA 2012 contribution “Gemischtphasige Filter” proposed a practical
-factorisation for that space @budde2012. It converts a target to minimum phase,
-truncates it, designs a short zero- or linear-phase residual, and alternately
-corrects both factors for the spectral error introduced by truncation. The
-original two-page paper stated the construction and its intended extensions,
-but did not provide a reference implementation or a controlled comparison
-against later alternatives.
+factorisation for that space @budde2012. Its developed construction converts a
+target to minimum phase, truncates it, designs a short zero- or linear-phase
+residual, and alternately corrects the two factors for the spectral error
+introduced by windowing. It also sketches minimum/maximum-phase and
+frequency-dependent extensions. The original two-page paper supplies neither a
+reference implementation nor a controlled numerical comparison.
 
 This document is a revised English treatment, not a historical translation.
-Sections that describe the 2012 construction are identified as such. Numerical
-conditioning, competing methods, failure cases, and the reproducibility
-apparatus are later additions developed in the companion repository.
+Historical claims are limited to what the 2012 paper states. Exact
+fixed-support accounting, numerical conditioning, deterministic stopping,
+competing methods, failure cases, and the reproducibility apparatus are later
+additions developed in the companion repository.
 
-== Contributions and scope
+== Historical scope and revision boundary
 
-The completed revision will:
+The 2012 contribution consists of four ideas:
 
-- state the alternating factorisation with an exact total-support budget;
-- compare designs under identical targets, weights, tap counts, and delay
+- treat the available pre-ringing time as a design budget between the
+  minimum- and linear-phase endpoints;
+- realise the mixed-phase response as a cascade of short minimum- and
+  linear-phase FIR factors;
+- form each factor from the target divided by the other factor, so it can
+  compensate the other's windowing error; and
+- repeat that residual design alternately, using response error as a possible
+  stopping criterion.
+
+The original paper describes a minimum/maximum-phase split, frequency-dependent
+phase weighting, and a three-factor decomposition only as possible extensions.
+They are not developed algorithms or evaluated results. Likewise, “nearly
+optimal” impulse-response length is a design objective in the original text,
+not a proved optimum or a claim supported by a benchmark.
+
+This revision adds the exact output-support convention, regularised spectral
+division, concrete minimum-phase reconstructions and windows, a reproducible
+stopping policy, common metrics, competing methods, and deterministic benchmark
+artifacts. Those additions must not be read back as results of the 2012 paper.
+The revised treatment:
+
+- states the alternating factorisation with an exact total-support budget;
+- compares designs under identical targets, weights, tap counts, and delay
   constraints;
-- measure the realised impulse response rather than only a design grid;
-- expose cases where each method is unreliable; and
-- map every reported number and figure to source code and a regeneration
+- measures the realised impulse response rather than only a design grid;
+- exposes cases where each method is unreliable; and
+- maps every reported number and figure to source code and a regeneration
   command.
 
 The `mixedphase` package contains general fixed-length FIR methods. The
@@ -86,15 +111,19 @@ specified complex response can be convex for useful norms. Selecting a phase
 that jointly balances magnitude error, delay, and temporal concentration is
 generally non-convex.
 
-== Fixed-support factorisation
+== Fixed-support convention of this revision
 
-The 2012 construction represents the final filter as the convolution
+The 2012 paper requires the two factor lengths to fit within a total budget and
+describes the total length informally as their sum. For ordinary finite
+convolution, however, lengths $N_A$ and $N_B$ produce
+$N_A + N_B - 1$ samples. The present revision removes that off-by-one ambiguity
+by defining
 
 $ h[n] = (a ast b)[n], quad N_A + N_B - 1 = N, $
 
 where $a[n]$ is causal and minimum phase and $b[n]$ is a symmetric
-linear-phase residual. If the requested delay is $d$ samples, the current
-implementation assigns
+linear-phase residual. If the requested pre-ringing budget is $d$ samples, the
+repository implementation assigns
 
 $ N_B = 2 d + 1, quad N_A = N - N_B + 1. $ <support-split>
 
@@ -102,32 +131,39 @@ Thus $d = 0$ yields the minimum-phase endpoint and
 $d = (N - 1) / 2$ yields the linear-phase endpoint without changing the final
 tap count.
 
-= Alternating minimum/linear-phase design
+= The 2012 alternating construction
 
-The construction below restates the algorithm in the notation of
-@budde2012 and the implementation in
-#code-path("mixedphase/iterative.go").
+The following is a faithful English restatement of the algorithm in
+@budde2012, with notation normalised to the present paper:
 
 1. Transform the prototype and retain its target magnitude $M$.
 2. Reconstruct a dense minimum-phase spectrum from $M$.
 3. Transform to time, truncate and window it to $N_A$ taps, producing $a$.
-4. Divide the target spectrum by the spectrum of $a$ using a regularised
-  quotient.
+4. Divide the target spectrum by the spectrum of $a$ to obtain the residual.
 5. Force the residual to zero phase, transform to time, centre it, and
   truncate and window it to $N_B$ taps, producing $b$.
-6. Alternately redesign $a$ from the residual of $b$ and $b$ from the
-  residual of $a$.
-7. Convolve the accepted factors and stop before the first pass that raises
-  the realised RMS magnitude error, or when the improvement falls below the
-  configured tolerance.
+6. Convolve the two factors to obtain the mixed-phase response.
+7. Return to the residual step, alternately dividing by $b$ and $a$, so each
+  factor compensates the windowing influence of the other.
 
 Truncation is not a neutral operation: it convolves the response with the
 spectrum of the selected window. The quotient in the next half-pass asks one
 factor to compensate for the other factor's truncation error. This alternating
 correction is the distinguishing step; direct phase interpolation does not
-perform it.
+perform it. The 2012 text proposes response difference as one possible stopping
+criterion and suggests varying window parameters during iteration, but fixes
+neither a numerical rule nor a particular window.
 
-== Minimum-phase reconstruction
+== Repository realisation
+
+The executable version is #code-path("mixedphase.DesignIterative"). It adopts
+the exact support split in @support-split, uses a scale-relative floor in every
+spectral quotient, applies deterministic windows, evaluates the realised
+convolution after each complete alternating pass, and returns the last accepted
+pair of factors. These choices make the historical construction testable; they
+are not claims about the unspecified implementation used in 2012.
+
+=== Minimum-phase reconstruction
 
 The implementation provides two equivalent dense-grid reconstructions:
 
@@ -142,7 +178,7 @@ directly. Finite support and windowing subsequently dominate the error for a
 single reconstruction, but repeated quotient updates can amplify their
 rounding differences.
 
-== Conditioning and stopping
+=== Conditioning and stopping
 
 The alternating update is not a contraction. A factor can contain a deep
 spectral null, so even regularised division may amplify small platform
@@ -157,10 +193,12 @@ experiments that require an exact pass count. The final paper will report the
 pass budget and the number of accepted passes for every alternating-design
 result.
 
-= Comparison methods
+= Post-2012 comparison methods
 
-The repository implements three general comparison paths and one
-structure-specific design.
+None of the methods in this section was evaluated in the 2012 contribution.
+The repository adds three general comparison paths and one structure-specific
+design to test the historical construction against alternatives under common
+budgets.
 
 == Prescribed phase
 
@@ -193,12 +231,13 @@ structure rather than selecting a general FIR phase. It belongs in the
 comparison because it buys latency for an important target class, but it is
 not part of the general mixed-phase API.
 
-= Evaluation protocol
+= Repository evaluation protocol
 
-The common benchmark suite evaluates low-pass, parametric-EQ, crossover,
-deep-notch, and measured room-correction targets. Each method receives the same
-target samples, frequency weights, tap budget, and applicable delay or
-magnitude constraint.
+The 2012 paper contains illustrative response and signal-flow figures but no
+machine-readable result set. The present revision's common benchmark suite
+evaluates low-pass, parametric-EQ, crossover, deep-notch, and measured
+room-correction targets. Each method receives the same target samples,
+frequency weights, tap budget, and applicable delay or magnitude constraint.
 
 The reported response is always recomputed from the realised taps. The suite
 records:
@@ -318,11 +357,20 @@ are outside the present scope.
 
 = Conclusion
 
-Mixed-phase FIR design is not one optimisation problem but a family of choices
-about which phase information to preserve, which error to minimise, and how to
-spend finite support. The revised paper makes those choices explicit and binds
-its evidence to executable designs. Final conclusions will follow after the
-full cross-target analysis and representative response plots have been
-technically reviewed.
+The 2012 contribution is the alternating minimum/linear-phase factorisation:
+two short FIR factors repeatedly compensate each other's windowing error so a
+pre-ringing budget can be spent without defaulting to a full linear-phase
+support. The exact support equation, regularisation, stop-before-rise policy,
+comparison methods, failure analysis, and benchmark evidence belong to this
+revision.
+
+More broadly, mixed-phase FIR design is not one optimisation problem but a
+family of choices about which phase information to preserve, which error to
+minimise, and how to spend finite support. This revision makes those choices
+and their provenance explicit and binds its new evidence to executable designs.
+Final comparative conclusions will follow after the full cross-target analysis
+and representative response plots have been technically reviewed.
+
+#colbreak()
 
 #bibliography("references.bib", style: "ieee", title: "References")

@@ -125,7 +125,7 @@ Exit criteria:
 - [x] A shared URL recreates the experiment deterministically, and its exported metrics
       agree with the native comparison harness within the documented cross-build tolerance.
 
-## Phase 5: Paper (Planned)
+## Phase 5: Paper (In progress)
 
 Author the revised English paper in Typst under `docs/paper/`; the `.typ` sources, not an
 edited PDF, are canonical. Follow the small build setup used by `../dig-the-diff`: `just`
@@ -148,7 +148,7 @@ Paper and evidence:
       before the impulse-response peak, and the hybrid graphic-EQ latency/error trade-off.
       Read both committed Phase 3 CSVs directly so a normal paper build has no chart
       runtime dependency.
-- [ ] Produce a revised English treatment, not merely a translation. Clearly separate the
+- [x] Produce a revised English treatment, not merely a translation. Clearly separate the
       2012 alternating-factorisation contribution from the later implementations,
       baselines, and comparative results added by this repository.
 - [ ] Match the paper's symbols and algorithm steps to the public Go API, and include a
