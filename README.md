@@ -53,6 +53,18 @@ func main() {
 }
 ```
 
+## Web demo
+
+Try the [Mixed Phase Lab](https://cwbudde.github.io/algo-mixedphase/) to compare the
+design methods interactively in the browser. The Go implementations run directly through
+WebAssembly.
+
+To run the lab locally:
+
+```bash
+just web-demo # Build and serve at http://localhost:8787
+```
+
 ## Comparing the methods
 
 The common reference suite covers low-pass, parametric-EQ, crossover,

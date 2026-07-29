@@ -1,6 +1,47 @@
 #import "style.typ": abstract, code-path, draft-note, paper
 
 #let revision = sys.inputs.at("revision", default: "working tree")
+#let reference-results = csv("../reference-results.csv", row-type: dictionary)
+
+#let method-name(value) = if value == "budde-iterative" {
+  "Alternating"
+} else if value == "phase-interpolation" {
+  "Phase interpolation"
+} else if value == "complex-minimax" {
+  "Complex minimax"
+} else if value == "low-group-delay" {
+  "Low group delay"
+} else {
+  value
+}
+
+#let rounded(value, digits: 2) = str(calc.round(float(value), digits: digits))
+#let percent(value, digits: 2) = (
+  rounded(
+    float(value) * 100,
+    digits: digits,
+  )
+    + "%"
+)
+#let milliseconds(value) = rounded(float(value) / 1000) + " ms"
+
+#let result-table(target) = {
+  let rows = reference-results.filter(row => row.at("target") == target)
+  table(
+    columns: (1.35fr, 0.9fr, 0.8fr, 0.8fr, 0.8fr),
+    align: (left, right, right, right, right),
+    table.header([Method], [Rel. error], [Mean delay], [Pre-peak], [Runtime]),
+    ..rows
+      .map(row => (
+        [#method-name(row.at("method"))],
+        [#percent(row.at("relative_magnitude_error"), digits: 4)],
+        [#rounded(row.at("mean_group_delay"))],
+        [#percent(row.at("pre_peak_energy_ratio"))],
+        [#milliseconds(row.at("runtime_us"))],
+      ))
+      .flatten(),
+  )
+}
 
 #show: paper.with(
   title: "Fixed-Support Mixed-Phase FIR Filter Design",
@@ -25,9 +66,9 @@
 
 #draft-note[
   This is the first compilable English draft. The method description and
-  evidence map follow the implementation; the common benchmark figures,
-  result tables, and final conclusions remain open until Phase 3 of the
-  repository roadmap is complete.
+  evidence map follow the implementation, and the first result table is read
+  directly from the committed reference CSV. Generated plots, the complete
+  paper result set, and audited conclusions remain open.
 ]
 
 = Introduction
@@ -195,13 +236,13 @@ not part of the general mixed-phase API.
 
 = Evaluation protocol
 
-The common benchmark suite will evaluate low-pass, parametric-EQ, crossover,
-deep-notch, and measured room-correction targets. Each method will receive the
-same target samples, frequency weights, tap budget, and applicable delay or
+The common benchmark suite evaluates low-pass, parametric-EQ, crossover,
+deep-notch, and measured room-correction targets. Each method receives the same
+target samples, frequency weights, tap budget, and applicable delay or
 magnitude constraint.
 
-The reported response will always be recomputed from the realised taps. Planned
-metrics are:
+The reported response is always recomputed from the realised taps. The suite
+records:
 
 - RMS and peak magnitude error;
 - mean and peak group delay in meaningful magnitude bands;
@@ -214,46 +255,63 @@ and perceptually irrelevant. Runtime comparisons will state the machine and
 toolchain; the paper build consumes committed benchmark artifacts and never
 reruns timing measurements.
 
+== First data-backed result
+
+@low-pass-table is rendered directly from
+#code-path("docs/reference-results.csv"). No result value is copied into the
+Typst source. This first slice establishes the data path while the generated
+plots and the cross-target discussion are being prepared.
+
+#figure(
+  result-table("low-pass"),
+  caption: [
+    Low-pass slice of the common reference suite. Relative error and pre-peak
+    energy are percentages; delay is in samples. Runtime is machine-local.
+  ],
+) <low-pass-table>
+
 #draft-note[
-  The Phase 3 CSVs and generated figures will be inserted here. Until those
-  artifacts are committed, this section defines the protocol but makes no
-  cross-method ranking.
+  A single target is not a method ranking. The final evaluation will include
+  all five targets, configuration budgets in every caption, generated response
+  and impulse plots, and the documented failure cases.
 ]
 
 = Reproducibility map
 
-#table(
-  columns: (1.25fr, 1.2fr, 1.55fr),
-  table.header([Paper item], [Implementation], [Evidence or regeneration]),
-  [Support split @support-split],
-  [#code-path("mixedphase/iterative.go")],
-  [#code-path("mixedphase/mixedphase_test.go")],
+#text(size: 8.3pt)[
+  #table(
+    columns: (1.05fr, 1.65fr, 1.3fr),
+    table.header([Paper item], [Implementation], [Evidence or regeneration]),
+    [Support split @support-split],
+    [#code-path("mixedphase/iterative.go")],
+    [#code-path("mixedphase/mixedphase_test.go")],
 
-  [Alternating factorisation],
-  [#code-path("mixedphase.DesignIterative")],
-  [`go test ./mixedphase`],
+    [Alternating factorisation],
+    [#code-path("mixedphase.DesignIterative")],
+    [`go test ./mixedphase`],
 
-  [Minimum-phase reconstruction],
-  [#code-path("mixedphase.MinimumPhaseWith")],
-  [`go test ./mixedphase`],
+    [Minimum-phase reconstruction],
+    [#code-path("mixedphase.MinimumPhaseWith")],
+    [`go test ./mixedphase`],
 
-  [Prescribed complex response],
-  [#code-path("mixedphase.DesignComplexLeastSquares")],
-  [`go test ./mixedphase`],
+    [Prescribed complex response],
+    [#code-path("mixedphase.DesignComplexLeastSquares")],
+    [`go test ./mixedphase`],
 
-  [Low-group-delay optimisation],
-  [#code-path("mixedphase.DesignLowGroupDelay")],
-  [`go test ./mixedphase`],
+    [Low-group-delay optimisation],
+    [#code-path("mixedphase.DesignLowGroupDelay")],
+    [`go test ./mixedphase`],
 
-  [Hybrid graphic equaliser],
-  [#code-path("graphiceq.Design")],
-  [`go test ./graphiceq`],
+    [Hybrid graphic equaliser],
+    [#code-path("graphiceq.Design")],
+    [`go test ./graphiceq`],
 
-  [Cross-method CSV], [#code-path("examples/mixedphase")], [`just compare`],
-  [Native/WASM agreement],
-  [#code-path("scripts/test-cross-build.sh")],
-  [`just test-cross-build`],
-)
+    [Cross-method CSV], [#code-path("examples/mixedphase")], [`just compare`],
+    [Native/WASM agreement],
+    [#code-path("scripts/test-cross-build.sh")],
+    [`just test-cross-build`],
+  )
+]
 
 The build embeds the repository revision shown on the title page. The Typst
 source, bibliography, generated figure inputs, and build workflow live beside
@@ -262,11 +320,11 @@ the implementation; the PDF is a build artifact.
 = Limitations and open work
 
 The current draft intentionally leaves three conclusions open. First, the
-common benchmark suite is not yet complete, so no method is ranked across
-target classes. Second, the original 2012 figures have not been reconstructed
-from machine-readable data. Third, perceptual evaluation is limited to
-objective pre-ringing and delay proxies; controlled listening tests are outside
-the present scope.
+committed benchmark suite has not yet been turned into the paper's full
+cross-target argument. Second, the original 2012 figures have not been
+reconstructed from machine-readable data. Third, perceptual evaluation is
+limited to objective pre-ringing and delay proxies; controlled listening tests
+are outside the present scope.
 
 = Conclusion
 

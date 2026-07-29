@@ -129,9 +129,9 @@ Exit criteria:
 
 Author the revised English paper in Typst under `docs/paper/`; the `.typ` sources, not an
 edited PDF, are canonical. Follow the small build setup used by `../dig-the-diff`: `just`
-recipes for build/watch, `typstyle` through treefmt, and a dedicated CI build. Writing and
-tooling can start before Phase 3 is complete, but quantitative results and conclusions are
-only frozen after the common benchmark suite exists.
+recipes for build/watch, `typstyle` through treefmt, and a dedicated CI build. The tooling
+is now in place, and the completed Phase 3 reference suite is the sole source for
+quantitative results and conclusions.
 
 Paper and evidence:
 
@@ -160,7 +160,7 @@ Build and publication:
 - [x] Add `just paper` and `just paper-watch`. A normal paper build consumes committed
       benchmark artifacts and produces `docs/paper/mixed-phase-filter-design-en.pdf`
       without rerunning timing benchmarks.
-- [ ] Add the data/figure refresh recipe once Phase 3 fixes the committed CSV schema.
+- [ ] Add the data/figure refresh recipe for the committed Phase 3 CSVs.
 - [x] Add Typst formatting to `treefmt.toml` with `typstyle`, and pin the Typst compiler and
       all imported Typst package versions used locally and in CI.
 - [x] Add a clean-checkout CI job that formats/checks the sources, compiles the paper, and

@@ -92,4 +92,4 @@
   #strong[Working-paper status.] #body
 ]
 
-#let code-path(path) = raw(path)
+#let code-path(path) = text(size: 8.3pt, raw(path))

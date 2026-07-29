@@ -39,7 +39,8 @@ implementation, evidence, configuration budget, and command that reproduces it.
 `just compare` regenerates the comparison CSVs, and the package tests carry the assertions
 behind quoted numbers.
 
-Normal paper builds consume committed data and never rerun timing benchmarks. Phase 3 will
-add the CSV-to-figure refresh command once the common benchmark schema is stable.
+Normal paper builds consume committed data and never rerun timing benchmarks. The first
+result table already reads `docs/reference-results.csv` directly. The next paper task is to
+add the CSV-to-figure refresh command for the response and impulse plots.
 
 [original]: https://pub.dega-akustik.de/DAGA_2012/data/articles/000281.pdf
