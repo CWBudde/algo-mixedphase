@@ -151,7 +151,7 @@ Paper and evidence:
 - [x] Produce a revised English treatment, not merely a translation. Clearly separate the
       2012 alternating-factorisation contribution from the later implementations,
       baselines, and comparative results added by this repository.
-- [ ] Match the paper's symbols and algorithm steps to the public Go API, and include a
+- [x] Match the paper's symbols and algorithm steps to the public Go API, and include a
       reproducibility appendix mapping each algorithm, numbered result, figure, and table
       to its implementation, test or Phase 3 CSV, configuration budget, and regeneration
       command.

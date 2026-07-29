@@ -32,16 +32,35 @@ func main() {
 		"",
 		"CSV path for wall-clock measurements; implies at least one trial",
 	)
+	responses := flag.String(
+		"responses",
+		"",
+		"CSV path for the representative realised frequency responses",
+	)
+	impulses := flag.String(
+		"impulses",
+		"",
+		"CSV path for the representative peak-aligned impulse responses",
+	)
 
 	flag.Parse()
 
-	if err := run(*trials, *document, *timings); err != nil {
+	if err := run(
+		*trials,
+		*document,
+		*timings,
+		*responses,
+		*impulses,
+	); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(trials int, document, timings string) error {
+func run(
+	trials int,
+	document, timings, responses, impulses string,
+) error {
 	if timings != "" && trials == 0 {
 		trials = 1
 	}
@@ -63,31 +82,70 @@ func run(trials int, document, timings string) error {
 		}
 	}
 
+	if responses != "" || impulses != "" {
+		frequencyRows, impulseRows, responseErr :=
+			reference.RepresentativeResponses()
+		if responseErr != nil {
+			return responseErr
+		}
+
+		if responses != "" {
+			if responseErr := writeArtifact(
+				responses,
+				func(file *os.File) error {
+					return reference.WriteResponseCSV(file, frequencyRows)
+				},
+			); responseErr != nil {
+				return responseErr
+			}
+		}
+
+		if impulses != "" {
+			if responseErr := writeArtifact(
+				impulses,
+				func(file *os.File) error {
+					return reference.WriteImpulseCSV(file, impulseRows)
+				},
+			); responseErr != nil {
+				return responseErr
+			}
+		}
+	}
+
 	return reference.WriteCSV(os.Stdout, rows)
 }
 
 func writeTimings(path string, rows []reference.Row, trials int) error {
-	file, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("create timings CSV: %w", err)
-	}
-
 	machine := runtime.GOOS + "/" + runtime.GOARCH
 
-	if err := reference.WriteTimingsCSV(
-		file,
-		rows,
-		machine,
-		runtime.Version(),
-		trials,
-	); err != nil {
+	return writeArtifact(path, func(file *os.File) error {
+		return reference.WriteTimingsCSV(
+			file,
+			rows,
+			machine,
+			runtime.Version(),
+			trials,
+		)
+	})
+}
+
+func writeArtifact(
+	path string,
+	write func(*os.File) error,
+) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("create CSV %s: %w", path, err)
+	}
+
+	if err := write(file); err != nil {
 		_ = file.Close()
 
 		return err
 	}
 
 	if err := file.Close(); err != nil {
-		return fmt.Errorf("close timings CSV: %w", err)
+		return fmt.Errorf("close CSV %s: %w", path, err)
 	}
 
 	return nil

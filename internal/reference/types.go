@@ -14,6 +14,10 @@ const (
 	// DelayBudget is the linear-phase delay requested from the three
 	// phase-controlled designs. The low-group-delay method chooses its own.
 	DelayBudget = 16
+	// RepresentativeTarget is the target used for realised-response plots.
+	// Its magnitude remains meaningful across the full audio band, while its
+	// group-delay weight selects a finite band away from DC and Nyquist.
+	RepresentativeTarget = "parametric-eq"
 )
 
 const (
@@ -54,4 +58,36 @@ type Row struct {
 	CoefficientPeak        float64
 	CoefficientRangeDB     float64
 	ConstraintViolation    float64
+}
+
+// FrequencyResponseRow is one realised positive-frequency sample for the
+// representative paper plots.
+type FrequencyResponseRow struct {
+	Target            string
+	Method            string
+	SampleRate        int
+	Taps              int
+	FFTSize           int
+	DelayBudget       int
+	FrequencyHz       float64
+	TargetMagnitudeDB float64
+	MagnitudeDB       float64
+	GroupDelay        float64
+	DelayWeight       float64
+}
+
+// ImpulseResponseRow is one peak-aligned coefficient for the representative
+// paper plot.
+type ImpulseResponseRow struct {
+	Target                string
+	Method                string
+	SampleRate            int
+	Taps                   int
+	FFTSize                int
+	DelayBudget            int
+	SampleIndex            int
+	PeakIndex              int
+	PeakAlignedIndex       int
+	Coefficient            float64
+	NormalisedCoefficient  float64
 }

@@ -119,7 +119,7 @@ convolution, however, lengths $N_A$ and $N_B$ produce
 $N_A + N_B - 1$ samples. The present revision removes that off-by-one ambiguity
 by defining
 
-$ h[n] = (a ast b)[n], quad N_A + N_B - 1 = N, $
+$ h[n] = (a ast b)[n], quad N_A + N_B - 1 = N, $ <factor-convolution>
 
 where $a[n]$ is causal and minimum phase and $b[n]$ is a symmetric
 linear-phase residual. If the requested pre-ringing budget is $d$ samples, the
@@ -131,7 +131,45 @@ Thus $d = 0$ yields the minimum-phase endpoint and
 $d = (N - 1) / 2$ yields the linear-phase endpoint without changing the final
 tap count.
 
-= The 2012 alternating construction
+#figure(
+  text(size: 7.5pt)[
+    #table(
+      columns: (0.38fr, 1.05fr, 1.55fr),
+      align: (center, left, left),
+      table.header([Symbol], [Meaning], [Public Go API]),
+      [$M(omega)$],
+      [magnitude derived from prototype],
+      [`prototype` argument; input phase discarded],
+
+      [$N$],
+      [output tap count],
+      [#code-path("IterativeConfig.Length"); `len(Result.Taps)`],
+
+      [$d$], [linear-factor delay], [#code-path("IterativeConfig.Delay")],
+
+      [$N_A$], [minimum-factor taps], [`len(Result.MinimumPhasePart)`],
+
+      [$N_B$], [linear-factor taps], [`len(Result.LinearPhasePart)`],
+      [$K$], [dense FFT grid], [#code-path("IterativeConfig.FFTSize")],
+
+      [$epsilon$], [magnitude floor], [#code-path("IterativeConfig.Epsilon")],
+
+      [$P_"max"$], [pass budget], [#code-path("IterativeConfig.Iterations")],
+
+      [$P$], [accepted passes], [#code-path("Result.Iterations")],
+      [$tau$],
+      [stopping tolerance],
+      [#code-path("IterativeConfig.ToleranceDB")],
+    )
+  ],
+  caption: [
+    Mathematical notation and its public API representation for the
+    alternating design. All exported identifiers are in package
+    #code-path("mixedphase").
+  ],
+) <api-notation>
+
+= The 2012 alternating construction <alternating-construction>
 
 The following is a faithful English restatement of the algorithm in
 @budde2012, with notation normalised to the present paper:
@@ -163,7 +201,32 @@ convolution after each complete alternating pass, and returns the last accepted
 pair of factors. These choices make the historical construction testable; they
 are not claims about the unspecified implementation used in 2012.
 
-=== Minimum-phase reconstruction
+For the public entry point, the executable steps are:
+
+1. Validate `prototype` and #code-path("IterativeConfig"), resolve zero-valued
+  fields to documented defaults, and transform the prototype on the $K$-point
+  grid.
+2. Compute $N_B = 2d + 1$ and $N_A = N - N_B + 1$. Return the appropriate
+  single-factor endpoint immediately when $d = 0$ or $N_A = 1$.
+3. Reconstruct and window `MinimumPhasePart`, divide by its spectrum with floor
+  $epsilon$, then reconstruct and window `LinearPhasePart`.
+4. For at most $P_"max"$ complete passes, redesign the minimum factor from the
+  current linear factor and then the linear factor from the candidate minimum
+  factor.
+5. Convolve the candidate factors, recompute #code-path("Result.Metrics") from
+  the realised taps, and reject the pass if RMS magnitude error rises.
+6. Otherwise accept the factors, increment $P$, and stop when the RMS-error
+  change is below $tau$.
+7. Return #code-path("Result.Taps"), both factors, the accepted-pass count $P$,
+  and the realised metrics.
+
+Negative #code-path("IterativeConfig.Iterations") returns the initial,
+uncorrected factorisation. Negative
+#code-path("IterativeConfig.ToleranceDB") retains the configured pass count by
+disabling both the rising-error and settling checks. These two experimental
+controls are intentionally distinct.
+
+=== Minimum-phase reconstruction <minimum-reconstruction>
 
 The implementation provides two equivalent dense-grid reconstructions:
 
@@ -189,9 +252,9 @@ discards the first rising pass.
 This stopping rule is deliberately empirical: it returns the first
 reproducible local minimum rather than claiming convergence. A negative
 stopping tolerance disables both rise detection and convergence checks for
-experiments that require an exact pass count. The final paper will report the
-pass budget and the number of accepted passes for every alternating-design
-result.
+experiments that require an exact pass count. The reproducibility appendix
+reports the configured pass budget, while every alternating-design CSV row
+records the number of accepted passes.
 
 = Post-2012 comparison methods
 
@@ -200,7 +263,7 @@ The repository adds three general comparison paths and one structure-specific
 design to test the historical construction against alternatives under common
 budgets.
 
-== Prescribed phase
+== Prescribed phase <prescribed-phase>
 
 Phase interpolation constructs a target whose unwrapped phase moves between
 the minimum- and linear-phase endpoints and then projects its inverse transform
@@ -213,7 +276,7 @@ weighted band is fitted accurately, so weak weights are safer than removing
 bins. The absolute complex objective also tends to prioritise the passband of
 a low-pass target unless attenuation is reflected in the weights.
 
-== Phase-free low-group-delay optimisation
+== Phase-free low-group-delay optimisation <low-delay-design>
 
 Wu, Gao, and Teo formulate FIR design as magnitude-constrained group-delay
 optimisation without prescribing the phase @wu2013. The local implementation
@@ -222,7 +285,7 @@ result depends on the starting point because changing between local basins can
 require moving a zero across the unit circle. Iteration count and penalty
 stages are therefore experimental budgets, not evidence of convergence.
 
-== Structure-specific graphic equalisation
+== Structure-specific graphic equalisation <graphic-eq-design>
 
 For octave graphic equalisation, Bruschi, Välimäki, Liski, and Cecchi replace
 the lowest linear-phase FIR band with an IIR shelving filter and retain the FIR
@@ -246,12 +309,14 @@ records:
 - mean and peak group delay in meaningful magnitude bands;
 - peak location, energy centroid, and energy before the peak;
 - coefficient range and constraint violation; and
-- iteration budget, accepted iterations, and runtime.
+- accepted iteration count.
 
 Group delay is masked in deep stopbands, where phase is numerically unstable
-and perceptually irrelevant. Runtime comparisons will state the machine and
-toolchain; the paper build consumes committed benchmark artifacts and never
-reruns timing measurements.
+and perceptually irrelevant. The deterministic quality CSV contains no runtime
+column. Machine-local timings, including the machine, Go version, and trial
+count, live in #code-path("docs/reference-timings.csv") and are regenerated
+only with `just compare-timings`. The paper build consumes committed quality
+artifacts and never reruns timing measurements.
 
 == Data-backed trade-offs
 
@@ -264,8 +329,10 @@ remain legible when printed in greyscale.
   accuracy-delay-chart(reference-results),
   caption: [
     Magnitude-accuracy versus mean-delay trade-off over all five reference
-    targets. Each point is a realised 129-tap design on the common 1024-point
-    grid; the error axis is logarithmic. Shape and colour identify the method.
+    targets at 48 kHz. Each point is a realised 129-tap design on the common
+    1024-point grid; the phase-controlled methods use a 16-sample budget. The
+    error axis is logarithmic. Shape and colour identify the method; complete
+    optimiser budgets are recorded in the reproducibility appendix.
   ],
 ) <accuracy-delay>
 
@@ -279,8 +346,9 @@ targets differ in difficulty, and the methods do not optimise the same norm.
   pre-ringing-chart(reference-results),
   caption: [
     Energy before the realised impulse-response peak for the five reference
-    targets (LP: low-pass; PEQ: parametric EQ; XO: crossover). Colour and hatch
-    pattern identify the method.
+    targets at 48 kHz and 129 output taps (LP: low-pass; PEQ: parametric EQ;
+    XO: crossover). Colour and hatch pattern identify the method; the
+    configurations are identical to @accuracy-delay.
   ],
 ) <pre-ringing>
 
@@ -302,6 +370,8 @@ structure and the applicable target class.
     RMS magnitude error versus realised latency for the hybrid octave graphic
     equaliser and an all-FIR design constrained to the same latency. Markers
     are discrete implemented configurations, not a continuous design curve.
+    The ten octave centres span 31.25 Hz to 16 kHz at 48 kHz; one through four
+    low bands are offloaded.
   ],
 ) <graphiceq-tradeoff>
 
@@ -316,35 +386,124 @@ octave-band “zigzag” without large interaction error.
   optimiser budget stated in every caption.
 ]
 
-= Reproducibility map
+= Reproducibility appendix
 
-#text(size: 8.4pt)[
-  #set par(justify: false, leading: 0.45em)
+This appendix covers every public design algorithm and every numbered equation,
+figure, and table in the current draft. Configuration fields not named below
+retain their documented zero-value defaults. The build embeds the repository
+revision shown on the title page.
 
-  - *Support split @support-split:* #code-path("mixedphase/iterative.go");
-    asserted in #code-path("mixedphase/mixedphase_test.go").
-  - *Alternating factorisation:* #code-path("mixedphase.DesignIterative");
+== Algorithms and analysis
+
+#text(size: 8.15pt)[
+  #set par(justify: false, leading: 0.42em)
+
+  - *Alternating factorisation, @alternating-construction.* _Implementation:_
+    #code-path("mixedphase.DesignIterative") in
+    #code-path("mixedphase/iterative.go"). _Evidence:_
+    #code-path("TestDesignIterativeHonoursTapBudget"),
+    #code-path("TestIterativeStopsBeforeRisingError"), and
+    #code-path("TestIterativeCrossBuildDeterminism"). _Reference budget:_
+    $N=129$, $d=16$, $K=1024$, $P_"max"=12$;
+    #code-path("MethodCepstrum"), rectangular window, scale-relative
+    $epsilon=10^(-12)$ of the target peak, and default
+    $tau=10^(-7)$ dB. The CSV records accepted $P$. _Reproduce:_
+    `go test ./mixedphase`; `just test-cross-build`.
+
+  - *Minimum-phase reconstruction, @minimum-reconstruction.*
+    _Implementation:_ #code-path("mixedphase.MinimumPhaseWith") and the method
+    selected by #code-path("MinimumPhaseConfig.Method"). _Evidence:_
+    #code-path("TestMinimumPhaseMethodsAgree"),
+    #code-path("TestHilbertReproducesTargetMagnitude"), and
+    #code-path("TestIterativeMethodsReachComparableQuality"). _Reference
+      budget:_ the figures use #code-path("MethodCepstrum") on $K=1024$ with the
+    scale-relative floor; #code-path("MethodHilbert") is the independently
+    tested alternative. _Reproduce:_ `go test ./mixedphase`.
+
+  - *Phase interpolation, @prescribed-phase.* _Implementation:_
+    #code-path("mixedphase.DesignPhaseInterpolation"). _Evidence:_
+    #code-path("TestPhaseInterpolationMovesPeakContinuously") and
+    #code-path("TestUniformWeightMatchesPhaseInterpolation"). _Reference
+      budget:_ #code-path("Length=129"), #code-path("FFTSize=1024"),
+    #code-path("Mix=0.25"), #code-path("MethodCepstrum"), default floor.
+    _Reproduce:_ `go test ./mixedphase`.
+
+  - *Weighted complex approximation, @prescribed-phase.* _Implementation:_
+    #code-path("mixedphase.DesignComplexLeastSquares"). _Evidence:_
+    #code-path("TestUniformWeightMatchesPhaseInterpolation"),
+    #code-path("TestMinimaxTradesRMSForPeak"), and
+    #code-path("TestUnweightedBandsAreUnconstrained"). _Reference budget:_
+    #code-path("Length=129"), #code-path("FFTSize=1024"),
+    #code-path("Mix=0.25"), uniform initial weight, 16 Lawson passes, and the
+    default $10^(-4)$ minimax tolerance. _Reproduce:_
     `go test ./mixedphase`.
-  - *Minimum-phase reconstruction:* #code-path("mixedphase.MinimumPhaseWith");
-    `go test ./mixedphase`.
-  - *Prescribed complex response:*
-    #code-path("mixedphase.DesignComplexLeastSquares"); `go test ./mixedphase`.
-  - *Low-group-delay optimisation:*
-    #code-path("mixedphase.DesignLowGroupDelay"); `go test ./mixedphase`.
-  - *Hybrid graphic equaliser:* #code-path("graphiceq.Design");
-    `go test ./graphiceq`.
-  - *Accuracy-delay and pre-ringing plots (@accuracy-delay; @pre-ringing):*
-    #code-path("docs/reference-results.csv"); `just paper-refresh`.
-  - *Graphic-EQ plot (@graphiceq-tradeoff):*
-    #code-path("docs/graphiceq-results.csv");
-    `just paper-refresh`.
-  - *Native/WASM agreement:* #code-path("scripts/test-cross-build.sh");
-    `just test-cross-build`.
+
+  - *Low-group-delay optimisation, @low-delay-design.* _Implementation:_
+    #code-path("mixedphase.DesignLowGroupDelay"). _Evidence:_
+    #code-path("TestLowGroupDelayGradientMatchesFiniteDifferences"),
+    #code-path("TestLowGroupDelayUndercutsMinimumPhase"), and
+    #code-path("TestLowGroupDelayDependsOnInitialisation"). _Reference budget:_
+    #code-path("Length=129"), #code-path("FFTSize=1024"), 2 dB magnitude
+    tolerance, target-specific #code-path("DelayWeight"), four penalty stages,
+    80 L-BFGS steps per stage, unit initial penalty, and the default
+    minimum-phase start. _Reproduce:_ `go test ./mixedphase`.
+
+  - *Hybrid graphic equaliser, @graphic-eq-design.* _Implementation:_
+    #code-path("graphiceq.Design") and #code-path("graphiceq.DefaultLength").
+    _Evidence:_ #code-path("TestDefaultLengthHalvesPerOffloadedBand"),
+    #code-path("TestHybridBeatsEqualLatencyFIR"), and
+    #code-path("TestImpulseResponseMatchesMetrics"). _Reference budget:_ ten
+    octave bands from 31.25 Hz to 16 kHz at 48 kHz with gains
+    $(6,-3,0,4,-6,2,0,-2,5,0)$ dB, #code-path("IIRBands=0..4"), default
+    #code-path("Q=1"), default FFT grid, and rectangular FIR window.
+    _Reproduce:_ `go test ./graphiceq`.
+
+  - *Common realised-response analysis.* _Implementation:_
+    #code-path("mixedphase.Analyze"), #code-path("internal/reference.Run"), and
+    #code-path("internal/reference.analyze"). _Evidence:_
+    #code-path("TestRunCoversEveryMethodAndMetric"),
+    #code-path("TestTargetsShareFixedBudgets"), and the committed-CSV assertion
+    in #code-path("internal/reference/reference_test.go"). _Budget:_ five
+    257-tap prototypes at 48 kHz, 129 output taps, $K=1024$, target-specific
+    group-delay weights, and no timing trials. _Reproduce:_
+    `go test ./internal/reference`; `just compare-check`.
 ]
 
-The build embeds the repository revision shown on the title page. The Typst
-source, bibliography, generated figure inputs, and build workflow live beside
-the implementation; the PDF is a build artifact.
+== Numbered items and artifacts
+
+#text(size: 8.15pt)[
+  #set par(justify: false, leading: 0.42em)
+
+  - *@factor-convolution and @support-split; @api-notation.* _Source:_
+    #code-path("IterativeConfig"), #code-path("Result"), and
+    #code-path("mixedphase/iterative.go"). _Evidence:_
+    #code-path("TestDesignIterativeHonoursTapBudget"),
+    #code-path("TestIterativeZeroDelayIsMinimumPhaseEndpoint"), and
+    #code-path("TestIterativeMaximumDelayIsLinearPhaseEndpoint"). _Budget:_ all
+    valid $0 <= d <= (N - 1) / 2$; the reference row uses $N=129$, $d=16$.
+    _Reproduce:_ `go test ./mixedphase`.
+
+  - *@accuracy-delay and @pre-ringing.* _Generator:_
+    #code-path("examples/mixedphase") through
+    #code-path("internal/reference.Run"). _Artifact:_
+    #code-path("docs/reference-results.csv"), whose schema and budgets are
+    asserted by #code-path("TestRunCoversEveryMethodAndMetric"). _Budget:_ the
+    general reference budgets listed above; iteration values in the CSV are
+    accepted counts, not maxima. _Reproduce:_ `just compare-check`; rebuild
+    with `just paper`.
+
+  - *@graphiceq-tradeoff.* _Generator:_ #code-path("examples/graphiceq").
+    _Artifact:_ #code-path("docs/graphiceq-results.csv"). Each hybrid split is
+    paired with an all-FIR #code-path("graphiceq.Design") whose
+    #code-path("Length") equals the hybrid tap count. _Budget:_ the graphic-EQ
+    configuration listed above. _Reproduce:_ `just compare-check`; rebuild
+    with `just paper`.
+]
+
+The Typst source, bibliography, generated figure inputs, and build workflow
+live beside the implementation; the PDF is a build artifact. There are no
+hand-entered quantitative result tables in this draft: @api-notation is a
+notation table, while all plotted values come from the two committed CSVs.
 
 = Limitations and open work
 

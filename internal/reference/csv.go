@@ -33,6 +33,34 @@ var csvHeader = []string{
 	"constraint_violation",
 }
 
+var responseCSVHeader = []string{
+	"target",
+	"method",
+	"sample_rate_hz",
+	"taps",
+	"fft_size",
+	"phase_delay_samples",
+	"frequency_hz",
+	"target_magnitude_db",
+	"magnitude_db",
+	"group_delay_samples",
+	"delay_weight",
+}
+
+var impulseCSVHeader = []string{
+	"target",
+	"method",
+	"sample_rate_hz",
+	"taps",
+	"fft_size",
+	"phase_delay_samples",
+	"sample_index",
+	"peak_index",
+	"peak_aligned_index",
+	"coefficient",
+	"normalised_coefficient",
+}
+
 // WriteCSV writes rows in the stable format committed under docs.
 func WriteCSV(output io.Writer, rows []Row) error {
 	writer := csv.NewWriter(output)
@@ -73,6 +101,88 @@ func WriteCSV(output io.Writer, rows []Row) error {
 
 	if err := writer.Error(); err != nil {
 		return fmt.Errorf("reference: flush CSV: %w", err)
+	}
+
+	return nil
+}
+
+// WriteResponseCSV writes the representative realised frequency responses in
+// the stable format consumed by the paper.
+func WriteResponseCSV(
+	output io.Writer,
+	rows []FrequencyResponseRow,
+) error {
+	writer := csv.NewWriter(output)
+
+	if err := writer.Write(responseCSVHeader); err != nil {
+		return fmt.Errorf("reference: write response CSV header: %w", err)
+	}
+
+	for _, row := range rows {
+		record := []string{
+			row.Target,
+			row.Method,
+			strconv.Itoa(row.SampleRate),
+			strconv.Itoa(row.Taps),
+			strconv.Itoa(row.FFTSize),
+			methodDelay(row.Method, row.DelayBudget),
+			formatFloat(row.FrequencyHz),
+			formatFloat(row.TargetMagnitudeDB),
+			formatFloat(row.MagnitudeDB),
+			formatFloat(row.GroupDelay),
+			formatFloat(row.DelayWeight),
+		}
+
+		if err := writer.Write(record); err != nil {
+			return fmt.Errorf("reference: write response CSV row: %w", err)
+		}
+	}
+
+	writer.Flush()
+
+	if err := writer.Error(); err != nil {
+		return fmt.Errorf("reference: flush response CSV: %w", err)
+	}
+
+	return nil
+}
+
+// WriteImpulseCSV writes the representative peak-aligned impulse responses in
+// the stable format consumed by the paper.
+func WriteImpulseCSV(
+	output io.Writer,
+	rows []ImpulseResponseRow,
+) error {
+	writer := csv.NewWriter(output)
+
+	if err := writer.Write(impulseCSVHeader); err != nil {
+		return fmt.Errorf("reference: write impulse CSV header: %w", err)
+	}
+
+	for _, row := range rows {
+		record := []string{
+			row.Target,
+			row.Method,
+			strconv.Itoa(row.SampleRate),
+			strconv.Itoa(row.Taps),
+			strconv.Itoa(row.FFTSize),
+			methodDelay(row.Method, row.DelayBudget),
+			strconv.Itoa(row.SampleIndex),
+			strconv.Itoa(row.PeakIndex),
+			strconv.Itoa(row.PeakAlignedIndex),
+			formatFloat(row.Coefficient),
+			formatFloat(row.NormalisedCoefficient),
+		}
+
+		if err := writer.Write(record); err != nil {
+			return fmt.Errorf("reference: write impulse CSV row: %w", err)
+		}
+	}
+
+	writer.Flush()
+
+	if err := writer.Error(); err != nil {
+		return fmt.Errorf("reference: flush impulse CSV: %w", err)
 	}
 
 	return nil
@@ -139,9 +249,13 @@ func formatFloat(value float64) string {
 }
 
 func phaseDelay(row Row) string {
-	if row.Method == "low-group-delay" {
+	return methodDelay(row.Method, row.DelayBudget)
+}
+
+func methodDelay(method string, delay int) string {
+	if method == "low-group-delay" {
 		return ""
 	}
 
-	return strconv.Itoa(row.DelayBudget)
+	return strconv.Itoa(delay)
 }

@@ -23,6 +23,7 @@ func TestResponseGroupDelayDoesNotWrapAroundStopbandZeros(t *testing.T) {
 		}
 
 		visibleBeyondPointOne++
+
 		if difference := math.Abs(response.groupDelay[index] - wantDelay); difference > 1e-8 {
 			t.Fatalf(
 				"group delay at frequency %.6f = %.12g, want %.12g (difference %.3g)",

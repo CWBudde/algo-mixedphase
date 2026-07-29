@@ -85,6 +85,8 @@ bench-ci:
 compare:
     go run ./examples/mixedphase \
         -document docs/MIXED_PHASE_FILTER_DESIGN.md \
+        -responses docs/reference-response.csv \
+        -impulses docs/reference-impulse.csv \
         > docs/reference-results.csv
     go run ./examples/graphiceq > docs/graphiceq-results.csv
 
@@ -102,6 +104,8 @@ compare-check:
     just compare
     git diff --exit-code -- \
         docs/reference-results.csv \
+        docs/reference-response.csv \
+        docs/reference-impulse.csv \
         docs/graphiceq-results.csv \
         docs/MIXED_PHASE_FILTER_DESIGN.md
 

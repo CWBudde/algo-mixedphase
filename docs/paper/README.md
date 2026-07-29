@@ -53,14 +53,20 @@ implemented or evaluated 2012 results.
 ## Keeping paper and code in step
 
 The point of this repository is that the paper's claims are re-runnable. When a figure or
-table corresponds to a measurement here, the reproducibility map in `paper.typ` records the
-implementation, evidence, configuration budget, and command that reproduces it.
+table corresponds to a measurement here, the reproducibility appendix in `paper.typ`
+records the implementation, evidence, configuration budget, and command that reproduces it.
 `just compare` regenerates the comparison CSVs, and the package tests carry the assertions
 behind quoted numbers.
 
 Normal paper builds consume committed data and never rerun timing benchmarks. The charts
 read `docs/reference-results.csv` and `docs/graphiceq-results.csv` directly. Only the
 explicit `just paper-refresh` command reruns the benchmark generators.
+
+The reproducibility appendix maps every public design method, numbered equation, figure,
+and table to its implementation, named tests, exact reference budget, artifact, and
+regeneration command. Its notation table records the correspondence between paper symbols
+and public Go configuration/result fields. The committed quality CSV deliberately contains
+no wall-clock values; those live separately in `docs/reference-timings.csv`.
 
 ## Layout reference
 
