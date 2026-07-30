@@ -26,6 +26,11 @@ var (
 	ErrInvalidDelay = errors.New("mixedphase: invalid delay")
 	// ErrInvalidPhaseMix is returned when phase mix is outside [0, 2].
 	ErrInvalidPhaseMix = errors.New("mixedphase: phase mix must be in [0, 2]")
+	// ErrDelayOutOfReach is returned when a requested group delay lies outside
+	// [0, Length-1], which no causal FIR of that support realises.
+	ErrDelayOutOfReach = errors.New(
+		"mixedphase: requested group delay is outside [0, Length-1]",
+	)
 	// ErrInvalidEpsilon is returned when a negative magnitude floor is given.
 	ErrInvalidEpsilon = errors.New("mixedphase: epsilon must not be negative")
 	// ErrInvalidWindowAlpha is returned when a negative window alpha is given.
@@ -193,6 +198,58 @@ type PhaseInterpolationConfig struct {
 	Method MinimumPhaseMethod
 }
 
+// ContinuumConfig configures [DesignContinuum].
+type ContinuumConfig struct {
+	// Length is the number of output taps. Zero uses the prototype length.
+	Length int
+
+	// TargetGroupDelay is the requested weighted mean group delay in samples,
+	// and is the only knob of the method. It must lie in [0, Length-1]:
+	// negative delay is not causal and Length-1 is maximum phase, beyond which
+	// a filter of this support has no phase left to spend.
+	//
+	// Which of the four regimes serves the request depends on the target, not
+	// on this field alone. The requested magnitude implies a minimum-phase
+	// group delay tau_min, and prescribing phase can reach any delay in
+	// [tau_min, Length-1-tau_min]. Requests inside that window cost latency
+	// only; requests outside it are met by conceding magnitude accuracy. The
+	// realised value is reported as [Result.AchievedGroupDelay] and the branch
+	// taken as [Result.Regime].
+	TargetGroupDelay float64
+
+	// FFTSize controls the dense design grid. Zero selects a power of two at
+	// least eight times the output length.
+	FFTSize int
+
+	// Epsilon is the magnitude floor used by minimum-phase reconstruction.
+	// Zero selects a scale-relative default. Negative values are rejected.
+	Epsilon float64
+
+	// Method selects the minimum-phase reconstruction whose phase is
+	// interpolated. The zero value is [MethodCepstrum].
+	Method MinimumPhaseMethod
+
+	// Iterations and PenaltyStages budget the optimiser that serves requests
+	// outside the reachable window. Zero values select the same defaults as
+	// [DesignLowGroupDelay]. As there, the iteration count is a second
+	// delay-versus-accuracy dial rather than a convergence threshold, so
+	// results should be quoted with the budget that produced them.
+	Iterations    int
+	PenaltyStages int
+
+	// DelayWeight holds one non-negative weight per bin on [0, Nyquist], so
+	// its length must be FFTSize/2+1. It selects the band whose group delay
+	// TargetGroupDelay refers to. Nil uses the squared target magnitude, which
+	// concentrates the request on the passband.
+	//
+	// The knob is only as meaningful as this band. Group delay is not a
+	// sensible whole-band quantity when the response has deep stopbands or
+	// spectral nulls, so a weight that does not mask them makes the requested
+	// delay an average over bins where phase is not audible and not numerically
+	// stable either.
+	DelayWeight []float64
+}
+
 // ComplexLeastSquaresConfig configures [DesignComplexLeastSquares].
 type ComplexLeastSquaresConfig struct {
 	// Length is the number of output taps. Zero uses the prototype length.
@@ -350,8 +407,62 @@ type Result struct {
 
 	// GroupDelay summarises the optimised group delay and the feasibility of
 	// the magnitude constraint. It is only populated by
-	// [DesignLowGroupDelay].
+	// [DesignLowGroupDelay] and [DesignContinuum].
 	GroupDelay GroupDelayMetrics
+
+	// Regime records which branch of the phase continuum produced Taps. It is
+	// only populated by [DesignContinuum]; the zero value
+	// [RegimeUnspecified] means no continuum dispatch took place.
+	Regime ContinuumRegime
+
+	// AchievedGroupDelay is the weighted mean group delay measured on Taps, in
+	// samples. It is only populated by [DesignContinuum], where it is the
+	// quantity the caller asked for and should be compared against the
+	// request: inside the reachable window the two agree to the projection
+	// residual, and outside it the difference is what the tap budget refused.
+	AchievedGroupDelay float64
+}
+
+// ContinuumRegime names the branch of the phase continuum a [DesignContinuum]
+// call took. The branches are separated by the reachable window
+// [tau_min, Length-1-tau_min] that the requested magnitude implies.
+type ContinuumRegime int
+
+const (
+	// RegimeUnspecified is the zero value, used by every design that does not
+	// dispatch on a requested group delay.
+	RegimeUnspecified ContinuumRegime = iota
+
+	// RegimeSubMinimum is a request below the minimum-phase group delay. No
+	// phase choice reaches it, so the magnitude gives way.
+	RegimeSubMinimum
+
+	// RegimeWindow is a request inside the reachable window, served by a
+	// prescribed phase at the mix the affine delay law inverts to. The
+	// magnitude is whatever a least-squares projection of that phase onto the
+	// tap budget achieves.
+	RegimeWindow
+
+	// RegimeSuperMaximum is a request beyond maximum phase. It is the mirror
+	// of [RegimeSubMinimum]: the sub-minimum solve runs on the reflected
+	// request and the result is reversed.
+	RegimeSuperMaximum
+)
+
+// String names the regime in the form used by the comparison artifacts.
+func (r ContinuumRegime) String() string {
+	switch r {
+	case RegimeSubMinimum:
+		return "sub-minimum"
+	case RegimeWindow:
+		return "window"
+	case RegimeSuperMaximum:
+		return "super-maximum"
+	case RegimeUnspecified:
+		return "unspecified"
+	default:
+		return "unknown"
+	}
 }
 
 // Metrics describes spectral error and the time distribution of an FIR.

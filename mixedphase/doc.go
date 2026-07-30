@@ -1,7 +1,7 @@
 // Package mixedphase designs finite impulse response filters whose delay and
 // pre-ringing lie between the minimum- and linear-phase extremes.
 //
-// The package contains five complementary design methods:
+// The package contains six complementary design methods:
 //
 //   - [DesignIterative] implements the alternating factorisation proposed by
 //     Christian-W. Budde at DAGA 2012. It factors a target magnitude response
@@ -21,9 +21,53 @@
 //   - [DesignLowGroupDelay] prescribes no phase at all. It minimises the
 //     weighted passband group delay subject to a magnitude tolerance, which is
 //     the formulation Wu, Gao and Teo use.
+//   - [DesignContinuum] takes the quantity a latency-constrained caller actually
+//     has — a number of samples of group delay — and selects the mechanism that
+//     serves it. It is the only entry point whose parameter is measured in the
+//     units the constraint is expressed in.
 //
-// All five operate on a real prototype impulse response. Its magnitude
+// All six operate on a real prototype impulse response. Its magnitude
 // response is the design target; its original phase is not otherwise used.
+//
+// # One parameter across the whole continuum
+//
+// The other five entry points each expose a different parameter, and none of them
+// is a group delay: a mix, a latency budget, a magnitude tolerance. Two of them
+// need a sweep before a caller learns what a given latency costs, and the budget
+// of [DesignIterative] does not shape phase at all. [DesignContinuum] exists
+// because that is an awkward way to meet a latency constraint.
+//
+// Two facts make a delay-valued parameter practical. The first is that the
+// prescribed phase of [prescribedResponse] is linear in its mix, and group delay
+// is a linear functional of phase, so the realised weighted mean delay is affine
+// in the mix,
+//
+//	tau(mix) = (1-mix)*tau_min + mix*(Length-1)/2
+//
+// which inverts in closed form: no search is needed inside the range this covers.
+// Across the six reference targets the realised delay tracks the request to within
+// 0.28 samples, which is the error of projecting the prescription onto a finite
+// support and is committed as a column of docs/reference-continuum.csv.
+//
+// The second is that the same relation bounds what phase alone can do. A mix is
+// confined to [0, maximumPhaseMix], so the reachable delays are
+//
+//	[tau_min, Length-1-tau_min]
+//
+// a window centred on linear phase whose width the requested magnitude sets rather
+// than the tap count. At 129 taps the reference targets range from 127.0 samples of
+// freedom for a room correction to 29.3 for an eighth-order crossover. Outside the
+// window phase choice is exhausted and only the magnitude can move, which is the
+// swapped problem form of [lowDelayProblem.evaluateMatchDelay].
+//
+// Two properties of the parameter are worth knowing before turning it. Group-delay
+// ripple falls monotonically to exactly zero at the centre of the window, but
+// magnitude error does not follow it: the phase-pure ends of the window are its
+// most accurate points as well as its fastest and slowest, because a spectral
+// factor of the target needs no compromise where an intermediate phase must be
+// approximated on the same taps. And both structures vanish when the requested
+// magnitude does not fit the support, so a narrow window is a warning that there
+// is nothing to choose between phases either.
 //
 // # Prescribed phase versus optimised phase
 //

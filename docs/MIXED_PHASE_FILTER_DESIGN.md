@@ -567,3 +567,78 @@ deviation, 0.8 to 8.0 samples here, which no budget reduces.
 `TestSweepBudgetGainTableMatchesTheDocumentation` pin these figures; the
 linear-phase family is sampled every 32 samples of latency, so each factor is
 accurate to within one stride.
+
+## One parameter across the whole continuum
+
+Everything above exposes a different design parameter, and none of them is a group
+delay: a mix, a latency budget, a magnitude tolerance. That is an awkward interface
+for the caller these methods exist to serve, who has a latency allowance in samples
+and needs to know what it costs. `DesignContinuum` takes that number directly and
+dispatches on it. The companion paper (`docs/paper/paper.typ`) is the full account;
+what follows is the part that matters when reading the code.
+
+**The affine delay law.** `prescribedResponse` blends the continuous minimum phase
+with a pure delay linearly in its mix. Group delay is a linear functional of phase,
+so the realised weighted mean delay is the same blend of the endpoint delays:
+
+    tau(mix) = (1-mix)*tau_min + mix*(Length-1)/2
+
+This inverts in closed form, so meeting a request inside its range costs one
+`DesignPhaseInterpolation` call and no search. The law is exact for the prescription
+and approximate for the filter, which is a least-squares projection onto `Length`
+taps. Measured across the six reference targets that residual stays under 0.08
+samples on five of them and reaches 0.28 on the parametric EQ near the
+maximum-phase end. `docs/reference-continuum.csv` commits `predicted_delay` beside
+`mean_group_delay` so the residual is an artifact rather than a claim;
+`TestContinuumAffineLawResidualIsSmall` gates it at 0.3 samples.
+
+**The reachable window.** A mix is confined to `[0, 2]`, so the same law bounds the
+delays a prescribed phase reaches to `[tau_min, Length-1-tau_min]` — centred on
+linear phase, with a width the requested magnitude sets rather than the tap count.
+At 129 taps:
+
+| target          | tau_min | window width |
+| --------------- | ------- | ------------ |
+| room correction | 0.50    | 127.0        |
+| low-pass        | 5.86    | 116.3        |
+| parametric EQ   | 6.21    | 115.6        |
+| deep notch      | 8.63    | 110.7        |
+| LR4 crossover   | 10.41   | 107.2        |
+| LR8 crossover   | 49.37   | 29.3         |
+
+A narrow window is a diagnostic, not a formality: it means the magnitude is the
+binding constraint. `TestContinuumWindowNarrowsWithTheFloor` pins the ordering.
+
+**Below the floor, the objective and the constraint swap.** Wu–Gao–Teo minimises
+delay subject to a magnitude band, which makes the tolerance the parameter.
+`lowDelayProblem.evaluateMatchDelay` solves the exchanged problem — magnitude error
+minimised subject to the requested delay — reusing the same L-BFGS minimiser and
+penalty ladder. The one structural difference is that the delay constraint is a
+single scalar over the grid rather than one inequality per bin, so its residual is
+unknown until the sweep finishes; the delay gradient is accumulated during the sweep
+and scaled afterwards. `DesignLowGroupDelay` is untouched, which
+`TestDesignLowGroupDelayIsUnchangedByTheNewProblemForm` gates.
+
+On the low-pass this reaches 1.46 samples at 16.0% relative magnitude error and
+0.58 dB RMS, where `DesignLowGroupDelay` at its published 2 dB tolerance stops at
+1.76 samples with 22.8% and 1.90 dB — faster and more accurate from the same
+starting point. On the LR8 crossover a request of 37.0 samples gives 0.48% relative
+error and 48.2 dB RMS against minimum-phase truncation's 1.23% at 49.4 samples,
+better on latency and on both magnitude measures at once, because the floor there
+guards a magnitude that 129 taps cannot realise anyway.
+
+**Three properties worth knowing before turning it.** Group-delay ripple falls
+monotonically to below 1e-13 samples at the centre of the window and mirrors back.
+Magnitude error does not follow it: the phase-pure ends of the window are its most
+accurate points, by a factor of 1.6e7 on the LR4 crossover and 12 on the room
+correction, because a spectral factor of the target needs no compromise where an
+intermediate phase must be approximated on the same taps. And both structures
+vanish on a target whose magnitude does not fit its support — the LR8 crossover
+spans a factor of 1.3 across its entire continuum.
+
+**Two limits to report with any result.** The sub-floor branches are local optima:
+the two tails of the parametric EQ report 6.6% and 6.1% for the same reflected
+request, because a difference in the last bits of the target delay changes the
+accepted step count. And a low mean group delay below the floor is not a
+well-behaved phase response — driving the low-pass to 1.46 samples raises its
+ripple from 1.117 to 27.2 samples, and the parametric EQ reaches 69.3.

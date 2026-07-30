@@ -102,7 +102,7 @@ func runPenaltyLadder(
 
 	for range stages {
 		problem.penalty = penalty
-		performed += minimizeLBFGS(problem.evaluate, taps, lbfgsMemory, iterations)
+		performed += minimizeLBFGS(problem.objective, taps, lbfgsMemory, iterations)
 		penalty *= penaltyGrowth
 	}
 
@@ -128,6 +128,31 @@ type lowDelayProblem struct {
 
 	denominatorFloor float64
 	penalty          float64
+
+	// matchDelay selects the swapped problem form of [evaluateMatchDelay]:
+	// magnitude error minimised subject to a requested weighted mean group
+	// delay, rather than delay minimised subject to a magnitude band. It is set
+	// only by [DesignContinuum]; [DesignLowGroupDelay] always leaves it false
+	// and therefore always runs [evaluate].
+	matchDelay      bool
+	requestedDelay  float64
+	magnitudeWeight []float64
+
+	// delayGrad accumulates the gradient of the weighted mean group delay while
+	// the matched form sweeps the grid. The delay residual it has to be scaled
+	// by is only known once that sweep finishes, so the two are combined
+	// afterwards rather than in a second sweep. Allocated only for the matched
+	// form.
+	delayGrad []float64
+}
+
+// objective evaluates whichever problem form this instance was built for.
+func (p *lowDelayProblem) objective(taps, grad []float64) float64 {
+	if p.matchDelay {
+		return p.evaluateMatchDelay(taps, grad)
+	}
+
+	return p.evaluate(taps, grad)
 }
 
 func newLowDelayProblem(

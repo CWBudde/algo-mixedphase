@@ -631,17 +631,24 @@
   x-label,
   y-label,
 ) = {
-  let horizontal = y-ticks
-    .map(tick => {
-      let y = y-position(tick.at(0))
-      (
-        svg-line(plot-left, y, plot-right, y, stroke: grid-color, width: 1),
-        svg-text(plot-left - 12, y + 6, tick.at(1), anchor: "end", size: 17),
-      )
-        .map(str)
-        .join("")
-    })
-    .join("")
+  // An empty tick list is a legitimate request: the lane charts label their rows
+  // inside the plot and want no vertical scale at all. It has to be special-cased
+  // because joining an empty array yields none rather than an empty string.
+  let horizontal = if y-ticks.len() == 0 {
+    ""
+  } else {
+    y-ticks
+      .map(tick => {
+        let y = y-position(tick.at(0))
+        (
+          svg-line(plot-left, y, plot-right, y, stroke: grid-color, width: 1),
+          svg-text(plot-left - 12, y + 6, tick.at(1), anchor: "end", size: 17),
+        )
+          .map(str)
+          .join("")
+      })
+      .join("")
+  }
   let vertical = x-ticks
     .map(tick => {
       let x = x-position(tick.at(0))
@@ -1501,5 +1508,610 @@
     (chart-axes, continuum, factorisation, style-key, sweep-target-legend())
       .map(str)
       .join(""),
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Continuum charts
+//
+// These read docs/reference-continuum.csv and
+// docs/reference-continuum-impulse.csv, whose rows are one requested group delay
+// each rather than one method each. The shared x axis is therefore the knob
+// itself, in samples, and every chart below spans the full causal range [0, N-1]
+// so that the three regimes stay in register from figure to figure.
+// ---------------------------------------------------------------------------
+
+#let target-labels = (
+  "low-pass": "Low-pass",
+  "parametric-eq": "Parametric EQ",
+  "crossover": "LR4 crossover",
+  "deep-notch": "Deep notch",
+  "room-correction": "Room correction",
+  "steep-crossover": "LR8 crossover",
+)
+
+#let target-index(target) = {
+  let found = reference-targets.position(name => name == target)
+  if found == none { 0 } else { found }
+}
+
+#let target-color(target) = method-colors.at(target-index(target))
+
+#let target-dash(target) = (
+  none,
+  "13 7",
+  "3 6",
+  "2 4",
+  "13 5 3 5",
+  "7 4 2 4",
+).at(target-index(target))
+
+#let target-legend(y: 396) = {
+  reference-targets
+    .enumerate()
+    .map(pair => {
+      let index = pair.at(0)
+      let target = pair.at(1)
+      let x = plot-left + calc.rem(index, 2) * 292
+      let row-y = y + calc.floor(index / 2) * 27
+      (
+        svg-line(
+          x,
+          row-y - 5,
+          x + 34,
+          row-y - 5,
+          stroke: target-color(target),
+          width: 4,
+          dash: target-dash(target),
+        ),
+        svg-text(
+          x + 44,
+          row-y,
+          target-labels.at(target),
+          anchor: "start",
+          size: 16,
+        ),
+      )
+        .map(str)
+        .join("")
+    })
+    .join("")
+}
+
+// The causal range of a 129-tap filter. Every continuum chart uses it, so the
+// figures can be read against one another and against the linear-phase mark at
+// its centre.
+#let continuum-span = 128
+#let continuum-x-ticks = (
+  (0, "0"),
+  (32, "32"),
+  (64, "64"),
+  (96, "96"),
+  (128, "128"),
+)
+
+#let continuum-rows-for(rows, target, regime) = rows.filter(row => (
+  row.at("target") == target and row.at("regime") == regime
+))
+
+// continuum-window-rows returns one target's in-window rows, which are the only
+// ones carrying a mix and a prediction.
+#let continuum-window-rows(rows, target) = continuum-rows-for(
+  rows,
+  target,
+  "window",
+)
+
+// continuum-branch marks the two optimised branches, which are sampled too
+// sparsely to draw as a line and are the interesting points anyway.
+#let continuum-branch-markers(
+  rows,
+  target,
+  x-pos,
+  y-pos,
+  y-key,
+  fill: auto,
+) = {
+  let color = if fill == auto { target-color(target) } else { fill }
+  ("sub-minimum", "super-maximum")
+    .map(regime => {
+      continuum-rows-for(rows, target, regime)
+        .map(row => {
+          let x = x-pos(float(row.at("requested_delay")))
+          let y = y-pos(float(row.at(y-key)))
+          (
+            "<circle cx=\"",
+            number(x),
+            "\" cy=\"",
+            number(y),
+            "\" r=\"4.5\" fill=\"",
+            color,
+            "\" stroke=\"",
+            ink,
+            "\" stroke-width=\"1\"/>",
+          )
+            .map(str)
+            .join("")
+        })
+        .join("")
+    })
+    .join("")
+}
+
+// linear-phase-mark draws the dotted vertical at (N-1)/2, the one delay at which
+// group delay is exactly flat.
+#let linear-phase-mark(x-pos, label-y: plot-top + 16) = {
+  (
+    svg-line(
+      x-pos(continuum-span / 2),
+      plot-top,
+      x-pos(continuum-span / 2),
+      plot-bottom,
+      stroke: muted,
+      width: 2,
+      dash: "5 5",
+    ),
+    svg-text(
+      x-pos(continuum-span / 2) + 8,
+      label-y,
+      "linear phase",
+      anchor: "start",
+      size: 15,
+      fill: muted,
+    ),
+  )
+    .map(str)
+    .join("")
+}
+
+// continuum-ripple-chart shows the quantity the knob actually shapes. Only the
+// in-window rows are drawn: below the floor the ripple runs to 27 samples and
+// would flatten everything else against the axis.
+#let continuum-ripple-chart(rows) = {
+  let x-pos(value) = x-linear(value, 0, continuum-span)
+  let y-max = 7.5
+  let y-pos(value) = y-linear(calc.clamp(value, 0, y-max), 0, y-max)
+  let curves = reference-targets
+    .map(target => xy-polyline(
+      continuum-window-rows(rows, target),
+      x-pos,
+      y-pos,
+      "requested_delay",
+      "group_delay_ripple",
+      target-color(target),
+      dash: target-dash(target),
+    ))
+    .join("")
+  let chart-axes = axes(
+    continuum-x-ticks,
+    ((0, "0"), (1.5, "1.5"), (3, "3"), (4.5, "4.5"), (6, "6"), (7.5, "7.5")),
+    x-pos,
+    y-pos,
+    "Requested group delay (samples)",
+    "Group-delay ripple (samples)",
+  )
+  chart-image(
+    (chart-axes, curves, linear-phase-mark(x-pos), target-legend())
+      .map(str)
+      .join(""),
+    height: 500,
+  )
+}
+
+// continuum-accuracy-chart is the counter-intuitive one: the phase-pure ends of
+// the continuum are the accurate places, and both the interior and the two
+// optimised branches cost magnitude. The vertical scale is ten decades because
+// the endpoints reach 1.6e-10 while the sub-floor points sit near 1e-1.
+#let continuum-accuracy-chart(rows) = {
+  let x-pos(value) = x-linear(value, 0, continuum-span)
+  let y-min = 0.0000000001
+  let y-max = 1
+  let y-pos(value) = y-log(calc.clamp(value, y-min, y-max), y-min, y-max)
+  let curves = reference-targets
+    .map(target => xy-polyline(
+      continuum-window-rows(rows, target),
+      x-pos,
+      y-pos,
+      "requested_delay",
+      "relative_magnitude_error",
+      target-color(target),
+      dash: target-dash(target),
+    ))
+    .join("")
+  let branches = reference-targets
+    .map(target => continuum-branch-markers(
+      rows,
+      target,
+      x-pos,
+      y-pos,
+      "relative_magnitude_error",
+    ))
+    .join("")
+  let chart-axes = axes(
+    continuum-x-ticks,
+    (
+      (0.0000000001, "1e-10"),
+      (0.00000001, "1e-8"),
+      (0.000001, "1e-6"),
+      (0.0001, "1e-4"),
+      (0.01, "1e-2"),
+      (1, "1"),
+    ),
+    x-pos,
+    y-pos,
+    "Requested group delay (samples)",
+    "Relative magnitude error",
+  )
+  chart-image(
+    (chart-axes, curves, branches, linear-phase-mark(x-pos), target-legend())
+      .map(str)
+      .join(""),
+    height: 500,
+  )
+}
+
+// continuum-window-chart is the diagnostic figure: how much phase freedom each
+// requested magnitude leaves in the same 129 taps. The bar is the reachable
+// window and the shaded ends are the regions only a magnitude concession opens.
+#let continuum-window-chart(rows) = {
+  let x-pos(value) = x-linear(value, 0, continuum-span)
+  let lane-height = (plot-bottom - plot-top) / (reference-targets.len() + 1)
+  let lanes = reference-targets
+    .enumerate()
+    .map(pair => {
+      let index = pair.at(0)
+      let target = pair.at(1)
+      let target-rows = rows.filter(row => row.at("target") == target)
+      let floor = float(target-rows.at(0).at("minimum_phase_delay"))
+      let y = plot-top + lane-height * (index + 0.5)
+      (
+        svg-line(
+          x-pos(0),
+          y,
+          x-pos(continuum-span),
+          y,
+          stroke: grid-color,
+          width: 12,
+        ),
+        svg-line(
+          x-pos(floor),
+          y,
+          x-pos(continuum-span - floor),
+          y,
+          stroke: target-color(target),
+          width: 12,
+        ),
+        svg-text(
+          x-pos(0) + 4,
+          y - 13,
+          target-labels.at(target),
+          anchor: "start",
+          size: 16,
+        ),
+        svg-text(
+          x-pos(continuum-span) - 4,
+          y - 13,
+          (
+            number(continuum-span - 2 * floor, digits: 1),
+            " samples wide",
+          )
+            .map(str)
+            .join(""),
+          anchor: "end",
+          size: 16,
+          fill: muted,
+        ),
+      )
+        .map(str)
+        .join("")
+    })
+    .join("")
+  let chart-axes = axes(
+    continuum-x-ticks,
+    (),
+    x-pos,
+    y-pos => y-pos,
+    "Group delay (samples)",
+    "",
+  )
+  chart-image(
+    (
+      chart-axes,
+      lanes,
+      linear-phase-mark(x-pos, label-y: plot-bottom - 8),
+    )
+      .map(str)
+      .join(""),
+    height: 400,
+  )
+}
+
+// continuum-residual-chart isolates the error of the affine delay law, which is
+// what decides whether a requested delay can be met in closed form. The law is
+// exact for the prescribed phase, so everything plotted here is the projection
+// onto a finite support.
+#let continuum-residual-chart(rows) = {
+  let x-pos(value) = x-linear(value, 0, continuum-span)
+  let y-max = 0.3
+  let y-pos(value) = y-linear(calc.clamp(value, -y-max, y-max), -y-max, y-max)
+  let zero = svg-line(
+    x-pos(0),
+    y-pos(0),
+    x-pos(continuum-span),
+    y-pos(0),
+    stroke: grid-color,
+    width: 4,
+  )
+  let curves = reference-targets
+    .map(target => {
+      let residual-rows = continuum-window-rows(rows, target).map(row => (
+        "requested_delay": row.at("requested_delay"),
+        "residual": str(
+          float(row.at("mean_group_delay")) - float(row.at("predicted_delay")),
+        ),
+      ))
+      xy-polyline(
+        residual-rows,
+        x-pos,
+        y-pos,
+        "requested_delay",
+        "residual",
+        target-color(target),
+        dash: target-dash(target),
+      )
+    })
+    .join("")
+  let chart-axes = axes(
+    continuum-x-ticks,
+    (
+      (-0.3, "-0.3"),
+      (-0.15, "-0.15"),
+      (0, "0"),
+      (0.15, "0.15"),
+      (0.3, "0.3"),
+    ),
+    x-pos,
+    y-pos,
+    "Requested group delay (samples)",
+    "Delay residual (samples)",
+  )
+  chart-image(
+    (chart-axes, zero, curves, linear-phase-mark(x-pos), target-legend())
+      .map(str)
+      .join(""),
+    height: 500,
+  )
+}
+
+// continuum-comparison-chart puts the knob's own curve next to the fixed points
+// the other methods reach on the same target, on the axes a latency-constrained
+// caller cares about: delay against magnitude error.
+//
+// The continuum is a curve because its delay is an input; every other method
+// here reports whatever delay its own parameter produced, so each is one point.
+#let continuum-comparison-chart(
+  results,
+  continuum,
+  target: "low-pass",
+  x-max: 128,
+  y-min: 0.0000000001,
+) = {
+  let x-pos(value) = x-linear(value, 0, x-max)
+  let y-max = 1
+  let y-pos(value) = y-log(calc.clamp(value, y-min, y-max), y-min, y-max)
+  let curve = xy-polyline(
+    continuum-window-rows(continuum, target),
+    x-pos,
+    y-pos,
+    "requested_delay",
+    "relative_magnitude_error",
+    ink,
+    width: 4,
+  )
+  // Black, matching the continuum curve: the coloured method markers include a
+  // filled circle, so a target-coloured branch point would be unreadable here.
+  let branches = continuum-branch-markers(
+    continuum,
+    target,
+    x-pos,
+    y-pos,
+    "relative_magnitude_error",
+    fill: ink,
+  )
+  let points = results
+    .filter(row => row.at("target") == target)
+    .map(row => marker(
+      row.at("method"),
+      x-pos(float(row.at("mean_group_delay"))),
+      y-pos(float(row.at("relative_magnitude_error"))),
+    ))
+    .join("")
+  let decades = (
+    (0.0000000001, "1e-10"),
+    (0.00000001, "1e-8"),
+    (0.000001, "1e-6"),
+    (0.0001, "1e-4"),
+    (0.01, "1e-2"),
+    (1, "1"),
+  ).filter(tick => tick.at(0) >= y-min)
+  let x-ticks = continuum-x-ticks.filter(tick => tick.at(0) <= x-max)
+  let chart-axes = axes(
+    x-ticks,
+    decades,
+    x-pos,
+    y-pos,
+    "Mean group delay (samples)",
+    "Relative magnitude error",
+  )
+  chart-image(
+    (chart-axes, curve, branches, points, method-legend()).map(str).join(""),
+    height: 500,
+  )
+}
+
+// continuum-impulse-chart draws the impulse response at each sampled position of
+// one target's continuum, stacked in one frame with a shared amplitude scale.
+//
+// The point of the figure is the last lane: it is the first lane read backwards.
+#let continuum-impulse-chart(rows, target: "low-pass") = {
+  let target-rows = rows.filter(row => row.at("target") == target)
+  let delays = target-rows
+    .filter(row => int(row.at("sample_index")) == 0)
+    .map(row => row.at("requested_delay"))
+  let taps = if target-rows.len() == 0 {
+    1
+  } else {
+    int(target-rows.at(0).at("taps"))
+  }
+  let x-pos(value) = x-linear(value, 0, taps - 1)
+  let lane-height = (plot-bottom - plot-top) / delays.len()
+  let lanes = delays
+    .enumerate()
+    .map(pair => {
+      let index = pair.at(0)
+      let delay = pair.at(1)
+      let lane-rows = target-rows.filter(row => (
+        row.at("requested_delay") == delay
+      ))
+      let regime = lane-rows.at(0).at("regime")
+      let centre = plot-top + lane-height * (index + 0.5)
+      let amplitude = lane-height * 0.42
+      let y-pos(value) = centre - value * amplitude
+      let baseline = svg-line(
+        x-pos(0),
+        centre,
+        x-pos(taps - 1),
+        centre,
+        stroke: grid-color,
+        width: 1,
+      )
+      let stems = lane-rows
+        .map(row => svg-line(
+          x-pos(float(row.at("sample_index"))),
+          centre,
+          x-pos(float(row.at("sample_index"))),
+          y-pos(float(row.at("normalised_coefficient"))),
+          stroke: target-color(target),
+          width: 1.6,
+        ))
+        .join("")
+      let caption = (
+        number(float(delay), digits: 1),
+        " samples · ",
+        regime,
+      )
+        .map(str)
+        .join("")
+      (
+        baseline,
+        stems,
+        svg-text(
+          plot-right - 12,
+          centre - amplitude + 2,
+          caption,
+          anchor: "end",
+          size: 15,
+          fill: muted,
+        ),
+      )
+        .map(str)
+        .join("")
+    })
+    .join("")
+  let chart-axes = axes(
+    ((0, "0"), (32, "32"), (64, "64"), (96, "96"), (128, "128")),
+    (),
+    x-pos,
+    y-pos => y-pos,
+    "Sample index",
+    "",
+  )
+  chart-image((chart-axes, lanes).map(str).join(""), height: 400)
+}
+
+// continuum-summary-table reports, per target, the two quantities that decide
+// what the knob can do for it: the floor its magnitude implies, and how much
+// accuracy the phase choice costs between the ends of its window.
+//
+// Every cell is computed from docs/reference-continuum.csv at build time, so the
+// table cannot drift from the artifact the figures draw.
+#let continuum-summary-table(rows) = {
+  let entry(target) = {
+    let window-rows = continuum-window-rows(rows, target)
+    let floor = float(window-rows.at(0).at("minimum_phase_delay"))
+    let endpoint = float(window-rows.at(0).at("relative_magnitude_error"))
+    let interior = window-rows
+      .slice(1, window-rows.len() - 1)
+      .map(row => float(row.at("relative_magnitude_error")))
+    let peak = interior.fold(0.0, (best, value) => calc.max(best, value))
+    (
+      floor: floor,
+      width: continuum-span - 2 * floor,
+      endpoint: endpoint,
+      peak: peak,
+      ratio: peak / endpoint,
+    )
+  }
+  let exponential(value, digits: 1) = {
+    if value == 0 {
+      "0"
+    } else {
+      let power = calc.floor(log10(value))
+      let mantissa = value / calc.pow(10.0, power)
+      (number(mantissa, digits: digits), "e", str(power)).map(str).join("")
+    }
+  }
+  table(
+    columns: (1.42fr, 0.56fr, 0.54fr, 0.72fr, 0.72fr, 0.6fr),
+    align: (left, right, right, right, right, right),
+    table.header(
+      [Target], [$tau_"min"$], [Width], [$E_"end"$], [$E_"peak"$], [Ratio]
+    ),
+    ..reference-targets
+      .map(target => {
+        let values = entry(target)
+        (
+          target-labels.at(target),
+          number(values.floor, digits: 2),
+          number(values.width, digits: 1),
+          exponential(values.endpoint),
+          exponential(values.peak),
+          exponential(values.ratio),
+        )
+      })
+      .flatten()
+      .map(cell => [#cell]),
+  )
+}
+
+// continuum-subfloor-table reports the exchange below the floor: what fraction
+// of its floor each target gives up, and what the magnitude paid for it.
+//
+// The row chosen per target is the most aggressive request the artifact samples,
+// so the table is the worst case of the ladder rather than an average of it.
+#let continuum-subfloor-table(rows) = {
+  table(
+    columns: (1.2fr, 0.58fr, 0.54fr, 0.74fr, 0.7fr, 0.64fr),
+    align: (left, right, right, right, right, right),
+    table.header(
+      [Target], [$tau_"min"$], [$tau$], [$E_"rel"$ (%)], [RMS (dB)], [Ripple]
+    ),
+    ..reference-targets
+      .map(target => {
+        let sub = continuum-rows-for(rows, target, "sub-minimum")
+        let row = sub.at(0)
+        let floor = float(row.at("minimum_phase_delay"))
+        let achieved = float(row.at("mean_group_delay"))
+        (
+          target-labels.at(target),
+          number(floor, digits: 2),
+          number(achieved, digits: 2),
+          number(100 * float(row.at("relative_magnitude_error")), digits: 1),
+          number(float(row.at("rms_magnitude_error_db")), digits: 1),
+          number(float(row.at("group_delay_ripple")), digits: 1),
+        )
+      })
+      .flatten()
+      .map(cell => [#cell]),
   )
 }

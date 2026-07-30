@@ -38,16 +38,23 @@ jobs:
           chmod +x /usr/local/bin/typstyle
 
       - name: Check paper formatting
-        run: typstyle --check docs/paper/paper.typ docs/paper/style.typ docs/paper/charts.typ
+        run: >-
+          typstyle --check docs/paper/paper.typ docs/paper/paper_brief.typ
+          docs/paper/style.typ docs/paper/charts.typ
 
       - name: Build paper
         run: just paper
 
-      - name: Upload paper
+      - name: Build brief
+        run: just paper-brief
+
+      - name: Upload papers
         uses: actions/upload-artifact@v4
         with:
           name: mixed-phase-filter-design-en
-          path: docs/paper/mixed-phase-filter-design-en.pdf
+          path: |
+            docs/paper/mixed-phase-filter-design-en.pdf
+            docs/paper/mixed-phase-filter-design-brief-en.pdf
           if-no-files-found: error
 
   release:
@@ -67,6 +74,8 @@ jobs:
       - name: Create release and attach paper
         uses: softprops/action-gh-release@v2
         with:
-          files: release/mixed-phase-filter-design-en.pdf
+          files: |
+            release/mixed-phase-filter-design-en.pdf
+            release/mixed-phase-filter-design-brief-en.pdf
           fail_on_unmatched_files: true
           generate_release_notes: true

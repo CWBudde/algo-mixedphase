@@ -1,5 +1,12 @@
 # Paper technical review
 
+> **Superseded.** This audit was completed against the manuscript that organised the
+> material around the alternating construction's delay budget. The paper was rewritten on
+> 2026-07-30 around the requested-delay parameter (`DesignContinuum`) and needs a fresh
+> audit; the findings below still apply to the claims both drafts share — the group-delay
+> floor, the ripple identity, and the 2012 attribution — but the figure, table and equation
+> numbering no longer matches.
+
 Review completed 2026-07-29 for the English Typst manuscript and the current
 Phase 3 reference suite. This record separates evidence that can be checked in
 the repository from the publication check that can only happen after a version

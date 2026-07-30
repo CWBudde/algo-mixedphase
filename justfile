@@ -4,6 +4,8 @@ export GOPRIVATE := "github.com/cwbudde"
 typst_version := "0.15.0"
 paper_source := "docs/paper/paper.typ"
 paper_output := "docs/paper/mixed-phase-filter-design-en.pdf"
+brief_source := "docs/paper/paper_brief.typ"
+brief_output := "docs/paper/mixed-phase-filter-design-brief-en.pdf"
 
 # Default recipe - show available commands
 default:
@@ -51,8 +53,17 @@ test-web: web-wasm
     ./scripts/test-web.sh
 
 # Run tests with race detector
+#
+# The default ten-minute per-package timeout is not enough for the whole tree at
+# once. internal/reference drives the L-BFGS penalty ladder over a 513-bin grid
+# for every out-of-window and floor-probe row, and the race detector's
+# instrumentation of those inner loops costs roughly a factor of five: the
+# package takes 333 s under -race when it runs alone, and exceeds 600 s when it
+# competes with the other packages `go test ./...` starts in parallel. The
+# timeout is therefore explicit rather than inherited. This recipe is
+# deliberately not part of `just ci`.
 test-race:
-    go test -race ./...
+    go test -race -timeout 45m ./...
 
 # Run tests with coverage
 test-coverage:
@@ -100,6 +111,8 @@ compare:
         -impulses docs/reference-impulse.csv \
         -sweep docs/reference-delay-sweep.csv \
         -regimes docs/reference-phase-regimes.csv \
+        -continuum docs/reference-continuum.csv \
+        -continuum-impulses docs/reference-continuum-impulse.csv \
         > docs/reference-results.csv
     go run ./examples/graphiceq > docs/graphiceq-results.csv
 
@@ -121,6 +134,8 @@ compare-check:
         docs/reference-impulse.csv \
         docs/reference-delay-sweep.csv \
         docs/reference-phase-regimes.csv \
+        docs/reference-continuum.csv \
+        docs/reference-continuum-impulse.csv \
         docs/graphiceq-results.csv \
         docs/MIXED_PHASE_FILTER_DESIGN.md
 
@@ -139,6 +154,13 @@ paper: paper-check-tools
         --input revision="$(git describe --always --dirty)" \
         {{ paper_source }} {{ paper_output }}
 
+# Build the short companion account. It reads the same committed artifact as the
+# full paper, so the two cannot disagree on a number.
+paper-brief: paper-check-tools
+    ./scripts/run-typst.sh compile --root . \
+        --input revision="$(git describe --always --dirty)" \
+        {{ brief_source }} {{ brief_output }}
+
 # Rebuild the paper whenever its Typst sources change
 paper-watch: paper-check-tools
     ./scripts/run-typst.sh watch --root . \
@@ -149,13 +171,14 @@ paper-watch: paper-check-tools
 paper-refresh:
     just compare
     just paper
+    just paper-brief
 
 # Run all checks (formatting, linting, tests, tidiness, reproducibility)
 ci: check-formatted build test test-cross-build test-web lint check-tidy check-coverage compare-check
 
 # Clean build artifacts
 clean:
-    rm -f coverage.out coverage.html {{ paper_output }}
+    rm -f coverage.out coverage.html {{ paper_output }} {{ brief_output }}
 
 # Build the Mixed Phase Lab Go/WASM assets
 web-wasm:

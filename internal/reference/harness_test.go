@@ -128,6 +128,24 @@ func TestCSVWritersReportWriteFailures(t *testing.T) {
 				return WriteRegimesCSV(errWriter{}, []RegimeRow{{Target: "t"}})
 			},
 		},
+		{
+			name: "continuum",
+			write: func() error {
+				return WriteContinuumCSV(
+					errWriter{},
+					[]ContinuumRow{{Target: "t", Regime: "window"}},
+				)
+			},
+		},
+		{
+			name: "continuum impulse",
+			write: func() error {
+				return WriteContinuumImpulseCSV(
+					errWriter{},
+					[]ContinuumImpulseRow{{Target: "t"}},
+				)
+			},
+		},
 	}
 
 	for _, test := range tests {

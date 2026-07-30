@@ -42,6 +42,7 @@ desktop.ini
 # DSP research/docs
 dsp/**/*.pdf
 /docs/paper/mixed-phase-filter-design-en.pdf
+/docs/paper/mixed-phase-filter-design-brief-en.pdf
 
 # WASM build artifacts
 /wasm
