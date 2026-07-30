@@ -36,7 +36,7 @@
     support rather than by the available latency, and a sweep over 129 to 1025
     taps finds it worth anything on one of six reference targets and only below
     about 513 taps. Below the floor, five of six targets buy delay by conceding
-    magnitude, the steepest giving up 70% of its floor for 1.90 dB. What the
+    magnitude, by up to 80% of that floor for under a decibel. What the
     construction does deliver is latency: at matched magnitude accuracy a
     linear-phase filter needs 8 to 22 times that of a minimum-phase-led design.
     All implementations and measurements are maintained in a public Go repository
@@ -103,8 +103,8 @@ generally non-convex.
 
 == The group-delay floor a magnitude request implies <group-delay-floor>
 
-Item 3 above is usually written as though delay were free to choose. It is not,
-and the constraint that binds it is the reason the rest of this paper is
+Item 3 above looks like a free choice, on a par with the support in item 2. It is
+not, and the constraint that binds it is the reason the rest of this paper is
 organised the way it is.
 
 Every causal realisation of a given magnitude differs from the minimum-phase one
@@ -146,7 +146,7 @@ degenerate when it is merely out of room.
     columns: 3,
     align: (left, right, right),
     table.header([Target], [$tau_"min"$], [Budget ceiling]),
-    [Room correction], [0.50], [0],
+    [Room correction], [0.50], [11],
     [First-order low-pass], [5.86], [39],
     [Parametric EQ], [6.21], [15],
     [Deep notch], [8.63], [14],
@@ -159,11 +159,18 @@ degenerate when it is merely out of room.
     before its minimum-phase factor no longer fits the $N - 2 d$ taps the split
     leaves it. Both are measured, not assumed: the floors are the minimum-phase
     row of #code-path("docs/reference-phase-regimes.csv"), and the ceilings come
-    from the factor's own support at a $10^(-6)$ energy tail. Two targets admit
-    no budget at all, because their minimum-phase response already needs the
-    whole support.
+    from the factor's own support at a $10^(-6)$ energy tail. Only the LR8
+    crossover admits no budget at all, its minimum-phase response already needing
+    the whole support.
   ],
 ) <floor-table>
+
+A small ceiling has two causes the number alone does not distinguish. The LR8
+crossover is starved: 107 of its 129 taps are needed for even a thousandth of its
+energy, so no budget is admissible and the magnitude was out of reach to begin
+with. Room correction is the opposite shape — 24 taps hold all but a thousandth
+of its energy, which is why its floor is half a sample — and its ceiling of 11
+comes from a low-level broadband tail, not from a factor that cannot fit.
 
 == Fixed-support convention of this revision
 
@@ -752,8 +759,9 @@ of a decibel to two.
     Weighted mean group delay in samples reached by the low-group-delay
     optimiser as its magnitude tolerance widens, against each target's floor.
     129 taps, 1024-point grid, four penalty stages of at most 80 L-BFGS steps.
-    Five targets buy delay below their floor, the low-pass most steeply at 70%
-    for 1.90 dB of RMS magnitude error. The LR8 crossover buys nothing: at 129
+    Five targets buy delay below their floor for at most 1.90 dB of RMS
+    magnitude error, room correction conceding the largest share of it at 80%.
+    The LR8 crossover buys nothing: at 129
     taps its magnitude is already unrealisable, so there is no accuracy left to
     concede. Source: #code-path("docs/reference-phase-regimes.csv").
   ],
@@ -1116,8 +1124,11 @@ Unless an entry states otherwise, its evidence is reproduced by
     stages of at most 80 L-BFGS steps. _Evidence:_
     #code-path("TestZeroDelayDesignSitsOnTheMinimumPhaseFloor") establishes that
     the floors are the target's and not the split's;
+    #code-path("TestBudgetCeilingsMatchTheDocumentation") pins the ceiling column
+    and the looser support measure that separates a starved factor from a long
+    tail;
     #code-path("TestFactorisationHoldsItsRippleWhileTheContinuumDescends") pins
-    the contrast and the budget ceilings;
+    the contrast across the invariance region;
     #code-path("TestContinuumGroupDelayIsLinearInMix") and
     #code-path("TestContinuumRippleIsSymmetricAndVanishesAtLinearPhase") pin the
     continuum's shape; #code-path("TestFloorProbeTradesMagnitudeForDelayBelowTheFloor")
@@ -1178,7 +1189,7 @@ bounded above by the optimiser's convergence rather than by the physics, so it
 measures what this solver can reach, not the best achievable exchange. The
 maximum-phase half of the continuum is included for completeness and is dominated
 throughout: being the exact time reverse of the minimum-phase design, it costs
-the most latency of any point on the continuum and recovers no accuracy for it.
+the most latency of any point on it and recovers no accuracy for that.
 
 Perceptual evaluation is limited to objective pre-ringing and delay proxies;
 controlled listening tests are outside the present scope. The group-delay
@@ -1208,20 +1219,20 @@ wants a _smaller_ budget, not a larger one, which is the opposite of the natural
 expectation.
 
 Below the floor the currency changes. No phase choice recovers a latency budget
-smaller than $tau_"min"$, and the six targets concede between 7% and 70% of their
+smaller than $tau_"min"$, and the six targets concede between 7% and 80% of their
 floor for one to two decibels of magnitude error — or, for the eighth-order
 crossover at 129 taps, nothing at all, because its magnitude is already beyond
 the support.
 
-Held fixed at 16 samples the budget leads no metric on any of the six targets,
-because on the five whose minimum-phase factor fits the allocated support the
-design is a delayed minimum-phase filter that the same code produces at $d = 0$
-with 10 to 16 fewer samples of latency. That is a property of the fixed budget,
-not of the factorisation, and it is correctable: selecting the budget by
+Held fixed at 16 samples the budget leads no metric on any of the six targets: on
+the five whose minimum-phase factor fits the allocated support the design is a
+delayed minimum-phase filter the same code produces at $d = 0$ with 10 to 16
+fewer samples of latency. That is a property of the fixed budget rather than of
+the factorisation, and it is correctable. Selecting the budget by
 @delay-objective makes the construction lead realised RMS dB magnitude error on
-all six targets — the only method here to lead a column outright — while declining
-the budget wherever it would be wasted, and reaching 3.310 dB on the one starved
-target against 6.901 dB for the fixed budget.
+all six targets — the only method here to lead a column outright — declining the
+budget wherever it would be wasted and reaching 3.310 dB on the one starved
+target against 6.901 dB.
 
 The construction's real advantage is elsewhere, and it is larger. At matched
 magnitude accuracy a linear-phase filter needs 8 to 22 times the latency of a
@@ -1245,8 +1256,8 @@ More broadly, mixed-phase FIR design is not one optimisation problem but a famil
 of choices about which phase information to preserve, which error to minimise, and
 how to spend finite support. Across this reference suite, alternating correction
 with a selected budget is the consistent dB-accuracy choice, minimum-phase
-truncation the consistent linear-magnitude choice, and the phase-free optimiser the
-consistent mean-delay choice; none of these conclusions extends beyond the stated
-targets, weights, and budgets.
+truncation the consistent linear-magnitude choice, and the phase-free optimiser
+the consistent mean-delay choice — none of it extending beyond the stated targets,
+weights, and budgets.
 
 #bibliography("references.bib", style: "ieee", title: "References")

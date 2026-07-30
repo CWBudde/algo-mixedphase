@@ -86,7 +86,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
   **Below the floor** no phase choice helps and only the magnitude can give way.
   Widening the low-group-delay optimiser's tolerance from 0.25 to 2 dB buys delay
-  under the floor on five targets, the low-pass most steeply at 70% for 1.90 dB;
+  under the floor on five targets, room correction conceding the largest share of
+  it at 80% and the parametric EQ the most samples at 4.28;
   the eighth-order crossover buys nothing, having no accuracy left to concede at
   129 taps. The ladder stops at 2 dB because wider tolerances stop measuring: at
   4 dB the optimiser has not converged and tracks its iteration budget rather

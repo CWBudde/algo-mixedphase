@@ -529,8 +529,9 @@ and `docs/reference-phase-regimes.csv` carries the curves.
 
 **Below the floor only the magnitude can give way.** No phase choice reaches a
 latency under `tau_min`. Widening `DesignLowGroupDelay`'s `ToleranceDB` from 0.25 to
-2 dB buys delay below the floor on five of six targets — the low-pass most steeply,
-giving up 70% of its floor for 1.90 dB of RMS magnitude error — while the LR8
+2 dB buys delay below the floor on five of six targets — room correction conceding
+the largest share of its floor at 80%, and the parametric EQ the most samples at
+4.28, for at most 1.90 dB of RMS magnitude error — while the LR8
 crossover buys nothing, having no accuracy left to concede at 129 taps. Beyond 2 dB
 the measurement stops being meaningful: at 4 dB the optimiser tracks its iteration
 budget rather than its tolerance, and at 8 dB the constraint admits a spectral null

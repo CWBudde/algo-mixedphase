@@ -452,6 +452,83 @@ func TestFactorisationHoldsItsRippleWhileTheContinuumDescends(t *testing.T) {
 	}
 }
 
+// TestBudgetCeilingsMatchTheDocumentation pins the budget ceilings quoted in the
+// paper's floor table, and with them the reason a ceiling is small.
+//
+// Two supports are pinned per target because a small ceiling has two quite
+// different causes and the ceiling alone does not distinguish them. The
+// steep crossover is genuinely starved: it needs 107 of the 129 taps for even a
+// thousandth of its energy, so there is no room for a second factor and the
+// magnitude itself is out of reach. Room correction is the opposite shape — a
+// quarter of that support holds all but a thousandth of its energy — and its
+// small ceiling comes from a low-level broadband tail that the stricter
+// threshold still counts. Reporting one as the other would misread a decaying
+// tail as a starved design.
+func TestBudgetCeilingsMatchTheDocumentation(t *testing.T) {
+	// energyTail matches the ceiling constraint; coarseTail is the second,
+	// looser measure that separates a starved factor from a long tail.
+	const (
+		energyTail = 1e-6
+		coarseTail = 1e-3
+	)
+
+	expected := map[string]struct {
+		support, coarseSupport, ceiling int
+	}{
+		"low-pass":        {51, 26, 39},
+		"parametric-eq":   {98, 51, 15},
+		"crossover":       {51, 32, 39},
+		"deep-notch":      {101, 47, 14},
+		"room-correction": {107, 24, 11},
+		"steep-crossover": {129, 107, 0},
+	}
+
+	targets, err := Targets()
+	if err != nil {
+		t.Fatalf("Targets() error = %v", err)
+	}
+
+	for _, target := range targets {
+		t.Run(target.Name, func(t *testing.T) {
+			want, ok := expected[target.Name]
+			if !ok {
+				t.Fatalf("no documented ceiling for target %q", target.Name)
+			}
+
+			minimum, err := mixedphase.DesignPhaseInterpolation(
+				target.Prototype,
+				mixedphase.PhaseInterpolationConfig{
+					Length:  TapCount,
+					Mix:     0,
+					FFTSize: FFTSize,
+				},
+			)
+			if err != nil {
+				t.Fatalf("DesignPhaseInterpolation() error = %v", err)
+			}
+
+			support := minimumPhaseSupport(minimum.Taps, energyTail)
+			if support != want.support {
+				t.Errorf("support = %d, want %d", support, want.support)
+			}
+
+			coarse := minimumPhaseSupport(minimum.Taps, coarseTail)
+			if coarse != want.coarseSupport {
+				t.Errorf(
+					"support at a %g tail = %d, want %d",
+					coarseTail,
+					coarse,
+					want.coarseSupport,
+				)
+			}
+
+			if ceiling := (TapCount - support) / 2; ceiling != want.ceiling {
+				t.Errorf("budget ceiling = %d, want %d", ceiling, want.ceiling)
+			}
+		})
+	}
+}
+
 // TestFloorProbeTradesMagnitudeForDelayBelowTheFloor is the below-floor result.
 // Relaxing the magnitude tolerance buys group delay under the minimum-phase
 // floor on every target whose magnitude the support can actually realise, and
@@ -520,6 +597,73 @@ func TestFloorProbeTradesMagnitudeForDelayBelowTheFloor(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestFloorProbeExtremesMatchTheDocumentation pins which target gives up the
+// most of its floor and which gives up the most samples, because they are not
+// the same target and the documentation quotes both.
+//
+// Room correction concedes the largest fraction, 80% of a floor that is only
+// half a sample to begin with; the parametric EQ concedes the most samples, 4.28
+// of them, which is 69% of a much larger floor. Neither superlative belongs to
+// the low-pass, whose 4.10 samples and 70% sit just under both. Quoting one of
+// these as "the steepest" is the error this test exists to prevent.
+func TestFloorProbeExtremesMatchTheDocumentation(t *testing.T) {
+	const (
+		fractionLeader = "room-correction"
+		samplesLeader  = "parametric-eq"
+
+		// Both extremes are pinned to a hundredth, which is finer than the
+		// documentation quotes them and coarse enough to survive the optimiser's
+		// last digits.
+		tolerance = 0.01
+	)
+
+	targets, err := Targets()
+	if err != nil {
+		t.Fatalf("Targets() error = %v", err)
+	}
+
+	bestFraction, bestSamples := 0.0, 0.0
+	fractionAt, samplesAt := "", ""
+
+	for _, target := range targets {
+		rows := regimeRowsFor(t, target.Name, "floor-probe")
+		floor := minimumPhaseFloor(t, target)
+		conceded := floor - rows[len(rows)-1].MeanGroupDelay
+
+		if fraction := conceded / floor; fraction > bestFraction {
+			bestFraction, fractionAt = fraction, target.Name
+		}
+
+		if conceded > bestSamples {
+			bestSamples, samplesAt = conceded, target.Name
+		}
+	}
+
+	t.Logf(
+		"largest fraction %.3f at %s, largest absolute %.3f samples at %s",
+		bestFraction,
+		fractionAt,
+		bestSamples,
+		samplesAt,
+	)
+
+	if fractionAt != fractionLeader {
+		t.Errorf("largest fraction conceded at %s, want %s", fractionAt, fractionLeader)
+	}
+
+	if math.Abs(bestFraction-0.80) > tolerance {
+		t.Errorf("largest fraction = %g, want 0.80", bestFraction)
+	}
+
+	if samplesAt != samplesLeader {
+		t.Errorf("largest absolute concession at %s, want %s", samplesAt, samplesLeader)
+	}
+
+	if math.Abs(bestSamples-4.28) > tolerance {
+		t.Errorf("largest absolute concession = %g samples, want 4.28", bestSamples)
 	}
 }
 

@@ -178,8 +178,9 @@
 // Below the floor no phase choice helps at all: the request is infeasible at
 // that magnitude and only the magnitude can give way. [DesignLowGroupDelay] is
 // the entry point for that regime, and widening its ToleranceDB is the dial. At
-// 129 taps five of the six targets buy delay under their floor, the low-pass
-// most steeply at 70% of it for 1.90 dB of RMS magnitude error; the LR8
+// 129 taps five of the six targets buy delay under their floor: room correction
+// concedes the largest share of it at 80%, and the parametric EQ the most
+// samples at 4.28, for at most 1.90 dB of RMS magnitude error. The LR8
 // crossover buys nothing, because at that support its magnitude is already
 // unrealisable and there is no accuracy left to concede.
 //
