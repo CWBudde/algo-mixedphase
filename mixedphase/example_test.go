@@ -2,6 +2,7 @@ package mixedphase_test
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/cwbudde/algo-mixedphase/mixedphase"
 )
@@ -119,6 +120,62 @@ func ExampleDesignLowGroupDelay() {
 	// true
 }
 
+// ExampleDesignPhaseInterpolation walks the phase continuum for one fixed
+// magnitude: minimum phase, linear phase, and maximum phase.
+func ExampleDesignPhaseInterpolation() {
+	prototype := []float64{
+		0.01, 0.04, 0.12, 0.20, 0.26, 0.20, 0.12, 0.04, 0.01,
+	}
+
+	design := func(mix float64) []float64 {
+		result, err := mixedphase.DesignPhaseInterpolation(
+			prototype,
+			mixedphase.PhaseInterpolationConfig{Mix: mix, FFTSize: 128},
+		)
+		if err != nil {
+			panic(err)
+		}
+
+		return result.Taps
+	}
+
+	minimum := design(0)
+	linear := design(1)
+	maximum := design(2)
+
+	// Linear phase centres the peak; the two extremes place it at mirrored
+	// positions either side of that centre, early for minimum phase and late
+	// for maximum phase.
+	fmt.Println(peakIndex(minimum), peakIndex(linear), peakIndex(maximum))
+
+	// The continuum is symmetric about linear phase, so maximum phase is the
+	// time reverse of minimum phase and buys no magnitude accuracy for the
+	// latency it costs.
+	reversed := true
+
+	for i, tap := range maximum {
+		if math.Abs(tap-minimum[len(minimum)-1-i]) > 1e-12 {
+			reversed = false
+		}
+	}
+
+	fmt.Println(reversed)
+	// Output:
+	// 2 4 6
+	// true
+}
+
+func peakIndex(taps []float64) int {
+	best := 0
+	for i, tap := range taps {
+		if math.Abs(tap) > math.Abs(taps[best]) {
+			best = i
+		}
+	}
+
+	return best
+}
+
 func ExampleDesignIterative() {
 	// A symmetric FIR prototype; in practice this can come from any linear
 	// phase design method.
@@ -147,12 +204,13 @@ func ExampleDesignIterative() {
 // ExampleDesignIterativeAuto shows the delay budget being chosen rather than
 // supplied.
 //
-// This prototype is a nine-tap symmetric FIR designed into nine taps, so the
-// largest budget the split admits gives the linear-phase factor the whole filter
-// and reproduces the prototype exactly. The search finds that, where a
-// hand-picked budget would have had to guess it. On a target whose minimum-phase
-// factor fits the support instead, the same call returns a delay of zero and a
-// unit-impulse linear factor.
+// This prototype is a nine-tap symmetric FIR designed into nine taps, so it is
+// reproduced exactly at both ends of the split: the largest admissible budget
+// gives the linear-phase factor the whole filter, and a zero budget gives the
+// minimum-phase factor the whole filter. Both reach 0.000 dB, so no budget earns
+// its latency and the search declines, returning the zero-delay design with a
+// unit-impulse linear factor. That is the property that makes this entry point
+// safe to reach for: it spends delay only when the delay buys accuracy.
 func ExampleDesignIterativeAuto() {
 	prototype := []float64{
 		0.01, 0.04, 0.12, 0.20, 0.26, 0.20, 0.12, 0.04, 0.01,
@@ -170,7 +228,7 @@ func ExampleDesignIterativeAuto() {
 	fmt.Println(len(result.MinimumPhasePart), len(result.LinearPhasePart))
 	fmt.Printf("%.3f dB\n", result.Metrics.RMSMagnitudeErrorDB)
 	// Output:
-	// 4
-	// 1 9
+	// 0
+	// 9 1
 	// 0.000 dB
 }

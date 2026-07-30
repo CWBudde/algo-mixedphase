@@ -9,6 +9,7 @@ import {
   copyDesign,
   decodeExperiment,
   designRequest,
+  maximumDelayFor,
   encodeExperiment,
   normaliseExperiment,
   presetExperiment,
@@ -95,4 +96,26 @@ test("stale worker responses are rejected per slot", () => {
 test("tap lengths stay on the supported odd grid", () => {
   assert.equal(normaliseExperiment({ length: 34 }).length, 33);
   assert.equal(normaliseExperiment({ length: 130 }).length, 129);
+});
+
+// The delay slider means a support split for the factorisation and a position
+// on the phase continuum for the prescribed-phase designs, so its ceiling is
+// method-dependent. Without this, half the continuum would be unreachable and a
+// shared URL naming maximum phase would be silently clamped to linear phase.
+test("prescribed-phase designs reach maximum phase, the factorisation stops at linear", () => {
+  const length = 129;
+  const linearPhase = (length - 1) / 2;
+
+  assert.equal(maximumDelayFor("interpolation", length), 2 * linearPhase);
+  assert.equal(maximumDelayFor("minimax", length), 2 * linearPhase);
+  assert.equal(maximumDelayFor("iterative", length), linearPhase);
+
+  const state = normaliseExperiment({
+    length,
+    a: { method: "interpolation", delay: 128 },
+    b: { method: "iterative", delay: 128 },
+  });
+
+  assert.equal(state.a.delay, 128, "maximum phase must survive normalisation");
+  assert.equal(state.b.delay, 64, "the split must still stop at linear phase");
 });

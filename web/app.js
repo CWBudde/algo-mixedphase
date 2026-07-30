@@ -13,6 +13,7 @@ import {
   swapDesigns,
   targetNote,
   usesCutoff,
+  maximumDelayFor,
   usesDelayControl,
 } from "./lab-state.mjs";
 import { ComparisonPlots } from "./plots.mjs";
@@ -207,11 +208,12 @@ function renderControls() {
   // moved the target.
   elements.cutoffControl.hidden = !usesCutoff(experiment.target);
 
-  const maximumDelay = (experiment.length - 1) / 2;
   for (const [slot, controls] of Object.entries(slots)) {
     const design = experiment[slot];
     controls.method.value = design.method;
-    controls.delay.max = String(maximumDelay);
+    controls.delay.max = String(
+      maximumDelayFor(design.method, experiment.length),
+    );
     controls.delay.value = design.delay;
     controls.tolerance.value = design.tolerance;
     controls.iterations.value = design.iterations;

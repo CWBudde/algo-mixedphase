@@ -347,6 +347,49 @@
   }
 }
 
+// xy-polyline draws a polyline from two named columns. The rows are used in the
+// order given, so a caller whose x column is not already sorted must sort first.
+#let xy-polyline(
+  rows,
+  x-position,
+  y-position,
+  x-key,
+  y-key,
+  stroke,
+  width: 3,
+  dash: none,
+) = {
+  if rows.len() == 0 {
+    ""
+  } else {
+    let points = rows
+      .map(row => (
+        number(x-position(float(row.at(x-key)))),
+        ",",
+        number(y-position(float(row.at(y-key)))),
+      ).join(""))
+      .join(" ")
+    let dash-attr = if dash == none {
+      ""
+    } else {
+      (" stroke-dasharray=\"", dash, "\"").map(str).join("")
+    }
+    (
+      "<polyline points=\"",
+      points,
+      "\" fill=\"none\" stroke=\"",
+      stroke,
+      "\" stroke-width=\"",
+      str(width),
+      "\" stroke-linejoin=\"round\" stroke-linecap=\"round\"",
+      dash-attr,
+      "/>",
+    )
+      .map(str)
+      .join("")
+  }
+}
+
 #let polyline(
   rows,
   x-position,
@@ -1169,5 +1212,294 @@
         ]),
       ))
       .flatten(),
+  )
+}
+
+// The sweep charts read docs/reference-delay-sweep.csv, whose fixtures are
+// 2049-tap prototypes rather than the 257-tap ones behind every other figure.
+// The two must not be read against each other, which is why the sweep carries a
+// prototype_taps column and why these captions state the fixture length.
+
+#let sweep-targets = (
+  ("low-pass", "First-order low-pass"),
+  ("parametric-eq", "Parametric EQ"),
+  ("crossover", "LR4 crossover"),
+  ("deep-notch", "Deep notch"),
+  ("room-correction", "Room correction"),
+  ("steep-crossover", "LR8 crossover"),
+)
+
+#let sweep-target-index(target) = {
+  let found = sweep-targets.position(entry => entry.at(0) == target)
+  if found == none { 0 } else { found }
+}
+
+// sweep-target-legend labels by target rather than by method, because both
+// series in these charts are the same design code at different budgets.
+#let sweep-target-legend(y: 396) = {
+  sweep-targets
+    .enumerate()
+    .map(pair => {
+      let index = pair.at(0)
+      let target = pair.at(1).at(0)
+      let x = plot-left + calc.rem(index, 3) * 195
+      let row-y = y + calc.floor(index / 3) * 28
+      (
+        svg-line(
+          x,
+          row-y - 5,
+          x + 26,
+          row-y - 5,
+          stroke: method-colors.at(sweep-target-index(target)),
+          width: 3,
+        ),
+        svg-text(x + 33, row-y, pair.at(1).at(1), anchor: "start", size: 16),
+      )
+        .map(str)
+        .join("")
+    })
+    .join("")
+}
+
+// latency-accuracy-chart is the headline comparison: what latency a
+// linear-phase filter needs to reach the accuracy a minimum-phase-led design
+// reaches almost immediately.
+//
+// Each curve is one target's linear-phase family, magnitude error against its
+// own latency. Each filled circle is the same target's 1025-tap design at a zero
+// budget. The horizontal distance from a circle to its own curve at equal height
+// is the latency the linear-phase route has to spend to catch up.
+#let latency-accuracy-chart(rows) = {
+  // Both axes are logarithmic and both are clamped. The errors span fifteen
+  // decades and this chart draws no clip path, so an unclamped point renders
+  // outside the frame rather than disappearing.
+  let x-min = 0.4
+  let x-max = 600
+  // The floor is the matching tolerance rather than the smallest value present.
+  // The mixed-phase designs reach 1e-15 dB, so any floor clamps them; putting it
+  // at the tolerance the comparison actually uses means a clamped circle and the
+  // curve that meets it are being read at the same accuracy.
+  let y-min = 0.0001
+  let y-max = 100
+  let match-tolerance = 0.001
+  let x-pos(value) = x-log(calc.clamp(value, x-min, x-max), x-min, x-max)
+  let y-pos(value) = y-log(calc.clamp(value, y-min, y-max), y-min, y-max)
+  let chart-axes = axes(
+    ((0.4, "0.4"), (1, "1"), (10, "10"), (100, "100"), (600, "600")),
+    (
+      (0.0001, "1e-4"),
+      (0.001, "1e-3"),
+      (0.01, "0.01"),
+      (1, "1"),
+      (100, "100"),
+    ),
+    x-pos,
+    y-pos,
+    "Latency: weighted mean group delay (samples)",
+    "RMS magnitude error (dB)",
+  )
+  let curves = sweep-targets
+    .map(entry => {
+      let target = entry.at(0)
+      let family = rows
+        .filter(row => (
+          row.at("target") == target and row.at("method") == "linear-phase"
+        ))
+        .sorted(key: row => float(row.at("mean_group_delay")))
+      xy-polyline(
+        family,
+        x-pos,
+        y-pos,
+        "mean_group_delay",
+        "rms_magnitude_error_db",
+        method-colors.at(sweep-target-index(target)),
+        dash: "7 5",
+      )
+    })
+    .join("")
+  let points = sweep-targets
+    .map(entry => {
+      let target = entry.at(0)
+      let matches = rows.filter(row => (
+        row.at("target") == target
+          and row.at("method") == "mixed-phase"
+          and row.at("taps") == "1025"
+          and row.at("phase_delay_samples") == "0"
+      ))
+      if matches.len() == 0 {
+        ""
+      } else {
+        let row = matches.first()
+        let x = x-pos(float(row.at("mean_group_delay")))
+        let y = y-pos(float(row.at("rms_magnitude_error_db")))
+        (
+          "<circle cx=\"",
+          number(x),
+          "\" cy=\"",
+          number(y),
+          "\" r=\"9\" fill=\"",
+          method-colors.at(sweep-target-index(target)),
+          "\" stroke=\"",
+          ink,
+          "\" stroke-width=\"2\"/>",
+        )
+          .map(str)
+          .join("")
+      }
+    })
+    .join("")
+  let tolerance-line = (
+    svg-line(
+      plot-left,
+      y-pos(match-tolerance),
+      plot-right,
+      y-pos(match-tolerance),
+      stroke: muted,
+      width: 2,
+      dash: "3 4",
+    ),
+    svg-text(
+      plot-left + 8,
+      y-pos(match-tolerance) - 8,
+      "matching tolerance",
+      anchor: "start",
+      size: 15,
+      fill: muted,
+    ),
+  )
+    .map(str)
+    .join("")
+  chart-image(
+    height: chart-height + 20,
+    (chart-axes, tolerance-line, curves, points, sweep-target-legend())
+      .map(str)
+      .join(""),
+  )
+}
+
+// phase-regime-chart is the paper's central contrast: what a filter buys by
+// spending latency above the group-delay floor its magnitude request implies.
+//
+// Both axes are normalised per target so that six targets share one frame.
+// Latency is the fraction of the way from the target's own minimum-phase floor
+// to linear phase, and ripple is relative to that target's own minimum-phase
+// ripple. Both families therefore start at exactly (0, 1) and the linear-phase
+// endpoint is exactly (1, 0), so the curves between them are directly readable
+// as how the surplus was spent.
+//
+// The continuum collapses onto the descending diagonal: prescribing a phase
+// between the endpoints converts latency into flatness in proportion. The
+// alternating factorisation instead holds its ripple while its minimum-phase
+// factor still fits its share of the taps, and falls only once the budget has
+// starved that factor away, which costs the magnitude the design was for.
+#let phase-regime-chart(rows) = {
+  let y-max = 1.25
+  let x-pos(value) = x-linear(calc.clamp(value, 0, 1), 0, 1)
+  let y-pos(value) = y-linear(calc.clamp(value, 0, y-max), 0, y-max)
+  let chart-axes = axes(
+    ((0, "0"), (0.25, "0.25"), (0.5, "0.5"), (0.75, "0.75"), (1, "1")),
+    ((0, "0"), (0.25, "0.25"), (0.5, "0.5"), (0.75, "0.75"), (1, "1")),
+    x-pos,
+    y-pos,
+    "Latency above the floor (fraction to linear phase)",
+    "Ripple, relative to minimum phase",
+  )
+  // Each target's own floor and its own minimum-phase ripple set the scales.
+  let reference-of(target) = {
+    let anchors = rows.filter(row => (
+      row.at("target") == target and row.at("regime") == "continuum"
+    ))
+    let at-mix(mix) = {
+      let found = anchors.filter(row => float(row.at("phase_mix")) == mix)
+      if found.len() == 0 { none } else { found.first() }
+    }
+    let minimum = at-mix(0)
+    let linear = at-mix(1)
+    if minimum == none or linear == none {
+      none
+    } else {
+      (
+        floor: float(minimum.at("mean_group_delay")),
+        span: float(linear.at("mean_group_delay"))
+          - float(minimum.at("mean_group_delay")),
+        ripple: float(minimum.at("group_delay_ripple")),
+      )
+    }
+  }
+  let family(target, regime, dash) = {
+    let scale = reference-of(target)
+    if scale == none or scale.span <= 0 or scale.ripple <= 0 {
+      ""
+    } else {
+      let points = rows
+        .filter(row => (
+          row.at("target") == target and row.at("regime") == regime
+        ))
+        .map(row => (
+          x: (float(row.at("mean_group_delay")) - scale.floor) / scale.span,
+          y: float(row.at("group_delay_ripple")) / scale.ripple,
+        ))
+        // The continuum runs on past linear phase to maximum phase, which is
+        // the mirror image of its first half and would double every curve
+        // back over itself.
+        .filter(point => point.x <= 1.0001)
+        .sorted(key: point => point.x)
+      xy-polyline(
+        points.map(point => (
+          mean_group_delay: str(point.x),
+          group_delay_ripple: str(point.y),
+        )),
+        x-pos,
+        y-pos,
+        "mean_group_delay",
+        "group_delay_ripple",
+        method-colors.at(sweep-target-index(target)),
+        width: 3,
+        dash: dash,
+      )
+    }
+  }
+  let continuum = sweep-targets
+    .map(entry => family(entry.at(0), "continuum", none))
+    .join("")
+  let factorisation = sweep-targets
+    .map(entry => family(entry.at(0), "factorisation", "7 5"))
+    .join("")
+  // A style key, since colour already carries the target.
+  let style-key = {
+    let y = plot-top + 26
+    (
+      svg-line(plot-right - 232, y - 5, plot-right - 206, y - 5, width: 3),
+      svg-text(
+        plot-right - 199,
+        y,
+        "prescribed continuum",
+        anchor: "start",
+        size: 16,
+      ),
+      svg-line(
+        plot-right - 232,
+        y + 23,
+        plot-right - 206,
+        y + 23,
+        width: 3,
+        dash: "7 5",
+      ),
+      svg-text(
+        plot-right - 199,
+        y + 28,
+        "alternating factorisation",
+        anchor: "start",
+        size: 16,
+      ),
+    )
+      .map(str)
+      .join("")
+  }
+  chart-image(
+    height: chart-height + 20,
+    (chart-axes, continuum, factorisation, style-key, sweep-target-legend())
+      .map(str)
+      .join(""),
   )
 }

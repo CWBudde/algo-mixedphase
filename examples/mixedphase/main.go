@@ -44,6 +44,16 @@ func main() {
 		"",
 		"CSV path for the representative peak-aligned impulse responses",
 	)
+	sweep := flag.String(
+		"sweep",
+		"",
+		"CSV path for the output-length and delay-budget sweep",
+	)
+	regimes := flag.String(
+		"regimes",
+		"",
+		"CSV path for the phase-continuum and group-delay-floor regimes",
+	)
 
 	flag.Parse()
 
@@ -53,6 +63,8 @@ func main() {
 		*timings,
 		*responses,
 		*impulses,
+		*sweep,
+		*regimes,
 	); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -61,7 +73,7 @@ func main() {
 
 func run(
 	trials int,
-	document, timings, responses, impulses string,
+	document, timings, responses, impulses, sweep, regimes string,
 ) error {
 	if timings != "" && trials == 0 {
 		trials = 1
@@ -110,6 +122,38 @@ func run(
 			); responseErr != nil {
 				return responseErr
 			}
+		}
+	}
+
+	if sweep != "" {
+		sweepRows, sweepErr := reference.SweepRows()
+		if sweepErr != nil {
+			return sweepErr
+		}
+
+		if sweepErr := writeArtifact(
+			sweep,
+			func(file *os.File) error {
+				return reference.WriteSweepCSV(file, sweepRows)
+			},
+		); sweepErr != nil {
+			return sweepErr
+		}
+	}
+
+	if regimes != "" {
+		regimeRows, regimeErr := reference.RegimeRows()
+		if regimeErr != nil {
+			return regimeErr
+		}
+
+		if regimeErr := writeArtifact(
+			regimes,
+			func(file *os.File) error {
+				return reference.WriteRegimesCSV(file, regimeRows)
+			},
+		); regimeErr != nil {
+			return regimeErr
 		}
 	}
 

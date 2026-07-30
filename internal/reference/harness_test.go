@@ -116,6 +116,18 @@ func TestCSVWritersReportWriteFailures(t *testing.T) {
 				return WriteTimingsCSV(errWriter{}, []Row{{Target: "t"}}, "m", "g", 1)
 			},
 		},
+		{
+			name: "sweep",
+			write: func() error {
+				return WriteSweepCSV(errWriter{}, []SweepRow{{Target: "t"}})
+			},
+		},
+		{
+			name: "regimes",
+			write: func() error {
+				return WriteRegimesCSV(errWriter{}, []RegimeRow{{Target: "t"}})
+			},
+		},
 	}
 
 	for _, test := range tests {

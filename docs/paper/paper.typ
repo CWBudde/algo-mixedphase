@@ -1,16 +1,18 @@
 #import "charts.typ": (
   accuracy-delay-chart, cross-target-summary-table, cross-target-win-count,
-  graphiceq-chart, group-delay-response-chart, magnitude-response-chart, number,
-  peak-aligned-impulse-chart, pre-ringing-chart, representative-results-table,
-  signal-flow-diagram,
+  latency-accuracy-chart, magnitude-response-chart, phase-regime-chart,
+  pre-ringing-chart, signal-flow-diagram,
 )
 #import "style.typ": code-path, paper
 
 #let revision = sys.inputs.at("revision", default: "working tree")
 #let reference-results = csv("../reference-results.csv", row-type: dictionary)
 #let reference-response = csv("../reference-response.csv", row-type: dictionary)
-#let reference-impulse = csv("../reference-impulse.csv", row-type: dictionary)
-#let graphiceq-results = csv("../graphiceq-results.csv", row-type: dictionary)
+#let reference-sweep = csv("../reference-delay-sweep.csv", row-type: dictionary)
+#let reference-regimes = csv(
+  "../reference-phase-regimes.csv",
+  row-type: dictionary,
+)
 
 #show: paper.with(
   title: "Fixed-Support Mixed-Phase FIR Filter Design",
@@ -18,33 +20,32 @@
   author: "Christian-W. Budde",
   revision: revision,
   abstract-body: [
-    Linear-phase finite impulse response filters offer constant group delay but
-    spend half their support before the impulse-response centre. Minimum-phase
-    filters minimise delay but accept frequency-dependent phase. This paper
-    revisits an alternating factorisation proposed at DAGA 2012 that combines
-    minimum- and linear-phase factors. It distinguishes that historical
-    construction from the exact support convention, numerical safeguards,
-    stopping rule, delay-selection rule, comparison methods, and evaluation
-    protocol introduced by the present revision. The later comparison covers
-    phase interpolation, weighted complex approximation, minimum-phase
-    truncation, direct low-group-delay optimisation, and a structure-specific
-    hybrid graphic equaliser. The benchmark's principal finding is that the
-    construction's delay budget, an input in 2012, is what limits it: held fixed
-    it leads no metric on any reference target, because on targets whose
-    minimum-phase factor fits the allocated support the design reduces to a
-    delayed minimum-phase filter. Selecting the budget against a stated
-    objective instead makes it lead realised RMS dB magnitude error on every
-    target while declining the budget wherever it would be wasted. All
-    implementations and measurements are maintained in a public Go repository so
-    that each quantitative claim can be traced to a test or a committed
-    comparison artifact.
+    A requested magnitude response fixes a group-delay floor: every causal
+    realisation differs from the minimum-phase one by an all-pass factor, whose
+    group delay is non-negative, so no design of that magnitude is faster. This
+    paper organises fixed-support mixed-phase FIR design around that floor,
+    building on the alternating minimum/linear-phase factorisation proposed at
+    DAGA 2012. Above the floor the surplus latency _is_ the all-pass factor, and
+    choosing it is the whole of the remaining phase freedom; below it no phase
+    choice helps and only the magnitude can give way. Three measured results
+    follow. The 2012 construction makes the above-floor choice implicitly and
+    takes the trivial one: its budget inserts a pure delay, so the cascade's
+    group-delay deviation equals its minimum-phase factor's and does not respond
+    to the budget at all, where a prescribed phase over the same latency converts
+    it into flatness almost proportionally. Its budget is bounded by the output
+    support rather than by the available latency, and a sweep over 129 to 1025
+    taps finds it worth anything on one of six reference targets and only below
+    about 513 taps. Below the floor, five of six targets buy delay by conceding
+    magnitude, the steepest giving up 70% of its floor for 1.90 dB. What the
+    construction does deliver is latency: at matched magnitude accuracy a
+    linear-phase filter needs 8 to 22 times that of a minimum-phase-led design.
+    All implementations and measurements are maintained in a public Go repository
+    so that each quantitative claim traces to a test or a committed comparison
+    artifact.
   ],
   status-body: [
-    This is a reviewed English author manuscript. The boundary between the 2012
-    contribution and later repository work has been audited against the
-    original paper. Its charts are generated from committed reference CSVs;
-    the tagged PDF is generated and attached by the repository release
-    workflow.
+    Reviewed English author manuscript. Charts are generated from committed
+    reference CSVs; the tagged PDF is built by the repository release workflow.
   ],
 )
 
@@ -66,52 +67,22 @@ introduced by windowing. It also sketches minimum/maximum-phase and
 frequency-dependent extensions. The original two-page paper supplies neither a
 reference implementation nor a controlled numerical comparison.
 
-This document is a revised English treatment, not a historical translation.
-Historical claims are limited to what the 2012 paper states. Exact
-fixed-support accounting, numerical conditioning, deterministic stopping,
-competing methods, failure cases, and the reproducibility apparatus are later
-additions developed in the companion repository.
+This document is a revised English treatment, not a historical translation. The
+2012 contribution supplies four ideas: treat the available pre-ringing time as a
+budget between the minimum- and linear-phase endpoints; realise the response as a
+cascade of short minimum- and linear-phase factors; form each factor from the
+target divided by the other, so it compensates the other's windowing error; and
+repeat that residual design alternately. Its minimum/maximum-phase split,
+frequency-dependent weighting, and three-factor decomposition are sketched as
+possible extensions rather than developed algorithms, and are not evaluated here.
 
-== Historical scope and revision boundary <revision-boundary>
-
-The 2012 contribution consists of four ideas:
-
-- treat the available pre-ringing time as a design budget between the
-  minimum- and linear-phase endpoints;
-- realise the mixed-phase response as a cascade of short minimum- and
-  linear-phase FIR factors;
-- form each factor from the target divided by the other factor, so it can
-  compensate the other's windowing error; and
-- repeat that residual design alternately, using response error as a possible
-  stopping criterion.
-
-The original paper describes a minimum/maximum-phase split, frequency-dependent
-phase weighting, and a three-factor decomposition only as possible extensions.
-They are not developed algorithms or evaluated results. Likewise, “nearly
-optimal” impulse-response length is a design objective in the original text,
-not a proved optimum or a claim supported by a benchmark.
-
-This revision adds the exact output-support convention, regularised spectral
-division, concrete minimum-phase reconstructions and windows, a reproducible
-stopping policy, common metrics, competing methods, deterministic benchmark
-artifacts, and a rule for choosing the delay budget. Those additions must not be
-read back as results of the 2012 paper. In particular, the delay budget is an
-_input_ to the 2012 construction; treating it as an output, as
-@delay-selection does, is work of this revision and is what the benchmark
-below shows the construction needs. The revised treatment:
-
-- states the alternating factorisation with an exact total-support budget;
-- compares designs under identical targets, weights, tap counts, and delay
-  constraints;
-- measures the realised impulse response rather than only a design grid;
-- exposes cases where each method is unreliable;
-- derives the delay budget from the target instead of accepting it; and
-- maps every reported number and figure to source code and a regeneration
-  command.
-
-The `mixedphase` package contains general fixed-length FIR methods. The
-`graphiceq` package is reported separately because its hybrid IIR/FIR structure
-only applies to octave graphic-equaliser targets.
+Everything else below is work of the present revision: the exact support
+convention, regularised spectral division, concrete reconstructions and stopping
+policy, the delay-selection rule, the comparison methods, the failure analysis, and
+the benchmark artifacts. The delay budget in particular is an _input_ to the 2012
+construction; treating it as an output, as @delay-selection does, is new, and is
+what the measurements below show the construction needs. A fuller attribution audit
+is kept with the repository sources rather than here.
 
 = Problem statement
 
@@ -129,6 +100,70 @@ These choices separate two problems that are often conflated. Approximating a
 specified complex response can be convex for useful norms. Selecting a phase
 that jointly balances magnitude error, delay, and temporal concentration is
 generally non-convex.
+
+== The group-delay floor a magnitude request implies <group-delay-floor>
+
+Item 3 above is usually written as though delay were free to choose. It is not,
+and the constraint that binds it is the reason the rest of this paper is
+organised the way it is.
+
+Every causal realisation of a given magnitude differs from the minimum-phase one
+by an all-pass factor: $H(z) = H_"min" (z) A(z)$ with $|A(e^(j omega))| = 1$. An
+all-pass response has non-negative group delay at every frequency, so
+
+$ tau_H (omega) >= tau_"min" (omega) quad "for all" omega. $ <delay-floor>
+
+The minimum-phase group delay is therefore a floor, and it is a property of the
+requested magnitude rather than a design choice. Asking for a steeper transition
+or a deeper notch raises it whether or not the designer intended to spend the
+latency.
+
+Two regimes follow, and they are not variations of one problem:
+
+/ Above the floor: the surplus $tau_H - tau_"min"$ _is_ the all-pass factor, and
+  choosing it is the whole of the remaining phase freedom. A design can spend the
+  surplus on flattening the group delay, running from minimum phase through
+  linear phase to maximum phase, or it can decline to and spend it as pure delay.
+  @phase-regimes shows both being done.
+
+/ Below the floor: there is nothing to shape. The request is infeasible at that
+  magnitude, and the only currency left is the magnitude itself: a shallower
+  transition lowers $tau_"min"$ along with it. @below-the-floor measures that
+  exchange.
+
+@floor-table gives the floors of the six reference targets, measured as the
+weighted mean group delay of the minimum-phase design at the published operating
+point. The spread is the point. A room-correction curve costs almost nothing,
+while the eighth-order crossover costs 49.4 samples before any phase shaping is
+possible at all --- so the 16-sample budget this comparison publishes is consumed
+three times over by that target's magnitude request alone, and the design it
+returns is necessarily a near-minimum-phase one. Reading a fixed budget across
+targets without their floors alongside is what makes the construction look
+degenerate when it is merely out of room.
+
+#figure(
+  table(
+    columns: 3,
+    align: (left, right, right),
+    table.header([Target], [$tau_"min"$], [Budget ceiling]),
+    [Room correction], [0.50], [0],
+    [First-order low-pass], [5.86], [39],
+    [Parametric EQ], [6.21], [15],
+    [Deep notch], [8.63], [14],
+    [LR4 crossover], [10.41], [39],
+    [LR8 crossover], [49.37], [0],
+  ),
+  caption: [
+    The group-delay floor of each reference target at 129 taps on a 1024-point
+    grid, in samples, and the largest delay budget the factorisation admits
+    before its minimum-phase factor no longer fits the $N - 2 d$ taps the split
+    leaves it. Both are measured, not assumed: the floors are the minimum-phase
+    row of #code-path("docs/reference-phase-regimes.csv"), and the ceilings come
+    from the factor's own support at a $10^(-6)$ energy tail. Two targets admit
+    no budget at all, because their minimum-phase response already needs the
+    whole support.
+  ],
+) <floor-table>
 
 == Fixed-support convention of this revision
 
@@ -153,15 +188,12 @@ tap count.
 #figure(
   signal-flow-diagram(),
   caption: [
-    Signal-flow comparison redrawn in the simple block style of the original
-    paper's Figures 2 and 3 @budde2012. The upper structure is not Budde's: it
-    is the mixed FIR/IIR arrangement of Goertz, Kleber, Makarski and Thaden
-    @goertz2011, which @budde2012 reproduces as its Figure 2 in order to
-    motivate the departure from it. The 2012 construction replaces that
-    minimum-phase IIR bank with the finite minimum-phase factor $a[n]$ and
-    cascades it with the linear-phase factor $b[n]$. The two FIR
-    blocks may be convolved into the single mixed-phase response $h[n]$ that
-    runs.
+    Signal-flow comparison redrawn in the block style of @budde2012, Figures 2
+    and 3. The upper structure is the mixed FIR/IIR arrangement the original
+    reproduces in order to motivate departing from it; the construction replaces
+    its minimum-phase IIR bank with the finite minimum-phase factor $a[n]$ and
+    cascades that with the linear-phase factor $b[n]$. The two FIR blocks may be
+    convolved into the single response $h[n]$ that runs.
   ],
 ) <factor-signal-flow>
 
@@ -225,13 +257,10 @@ where noted after the list:
 7. Return to the residual step, alternately dividing by $b$ and $a$, so each
   factor compensates the windowing influence of the other.
 
-Two statements of the original are deliberately absent above, because neither
-is implemented here. Step 6 of @budde2012 offers forcing *minimum* phase as an
-alternative to forcing zero phase, and the sentence immediately following its
-step list then requires one of the two factors to be reversed in time, which
-yields a minimum/maximum-phase split rather than the minimum/linear-phase split
-used throughout this paper. Both belong to the extensions listed in
-@revision-boundary and neither was evaluated.
+Two options of the original are absent above because neither is implemented
+here: forcing the residual to minimum rather than zero phase, and time-reversing
+one factor to obtain a minimum/maximum-phase split. Both are extensions the
+original only sketches.
 
 Truncation is not a neutral operation: it convolves the response with the
 spectrum of the selected window. The quotient in the next half-pass asks one
@@ -309,10 +338,17 @@ records the number of accepted passes.
 
 === Selecting the delay budget <delay-selection>
 
-In the 2012 construction the delay $d$ is given. @failure-mode-table and
-@cross-target-summary show that this is the construction's principal practical
-weakness rather than a detail of its interface, and that it fails in both
-directions. Too large a budget on a target whose minimum-phase factor already
+In the 2012 construction the delay $d$ is given. It is worth being precise about
+what it measures: $d$ is not the filter's latency but its _excess_ over the floor
+of @group-delay-floor, since the design's mean group delay is $tau_"min" + d$
+while the minimum-phase factor still fits. A controller that can afford $L$
+samples end to end therefore has $L - tau_"min"$ to offer here, not $L$ — which
+for the eighth-order crossover at 129 taps is negative for every budget this
+comparison publishes.
+
+@failure-mode-table and @cross-target-summary show that the given budget is the
+construction's principal practical weakness rather than a detail of its
+interface, and that it fails in both directions. Too large a budget on a target whose minimum-phase factor already
 fits $N - 2 d$ taps buys nothing: the design degenerates as described in
 @evaluation-protocol and pays $d$ samples of latency for a delayed
 minimum-phase filter. Too small a non-zero budget is worse still. On the steep-crossover
@@ -326,21 +362,85 @@ This revision therefore treats $d$ as an output. The rule is stated as a
 constrained selection over the same construction:
 
 $
-  d^* = arg min_(d in D) E_"dB" (d) \
-  "subject to" quad E_"rel" (d) <= (1 + sigma) E_"rel" (0),
+  d^* = arg min_(d in D) E_"dB" (d) quad "subject to" \
+  E_"rel" (d) <= max((1 + sigma) E_"rel" (0), epsilon_"rel"), \
+  E_"dB" (d) <= E_"dB" (0) - delta quad "for" d > 0,
 $ <delay-objective>
 
 where $E_"dB"$ is the realised RMS dB magnitude error, $E_"rel"$ the relative
-linear-magnitude error, $sigma$ a caller-stated slack, and $D$ a set of
-candidate budgets that always contains zero. The dB error is the objective
-because it is the measure sensitive to stopband depth, which @contrast-magnitude
-shows is what the factorisation actually buys; the relative error is the
-constraint because it is dominated by the passband, which is what a deeper
-stopband can otherwise be paid for with. Because $d = 0$ is always a candidate
-and always satisfies the constraint, the selected design is never worse than
-minimum-phase truncation in $E_"dB"$.
+linear-magnitude error, $sigma$ a caller-stated slack, and $D$ a set of candidate
+budgets that always contains zero. The dB error is the objective because it is
+the measure sensitive to stopband depth, which @contrast-magnitude shows is what
+the factorisation actually buys; the relative error is the constraint because it
+is dominated by the passband, which is what a deeper stopband can otherwise be
+paid for with. Because $d = 0$ is always a candidate and always satisfies both
+constraints, the selected design is never worse than minimum-phase truncation in
+$E_"dB"$.
 
-Two properties of this rule should be stated plainly. It does not promise a
+The two bounds on the right are not decoration; each corrects a way the plain
+form misbehaves. The floor $epsilon_"rel"$ is needed because a purely
+multiplicative passband constraint stops meaning anything once the $d = 0$ design
+is already accurate. Designing the eighth-order crossover into 193 taps puts
+$E_"rel" (0)$ near $2 dot 10^(-3)$, so a three-times ceiling rejects the
+eleven-sample budget at $7.5 dot 10^(-3)$ — trading 16 dB of stopband depth for a
+passband regression under a hundredth of a decibel. The margin $delta$ is needed
+because the objective does not price latency at all: on a 129-tap low-pass a
+one-sample budget lowers $E_"dB"$ from 0.800 dB to 0.498 dB, and without a margin
+the rule spends a sample of latency and abandons the exact minimum-phase design
+for three tenths of a decibel. The implementation uses $epsilon_"rel" = 10^(-2)$,
+about 0.09 dB, and $delta = 1$ dB, and breaks ties towards the shorter delay.
+
+=== The construction spends its surplus as pure delay <ripple-invariance>
+
+@group-delay-floor says that latency above the floor is an all-pass factor and
+that choosing it is the whole of the remaining phase freedom. This construction
+makes that choice implicitly, and the choice it makes is the trivial one.
+
+The linear-phase factor is symmetric, so its phase is exactly linear and its
+group delay exactly constant. Group delays add along a cascade, so the deviation
+of $h$ from constant group delay is the minimum-phase factor's deviation alone,
+
+$ rho(h) = rho(a), $ <ripple-identity>
+
+where $rho$ denotes weighted RMS group-delay deviation. The all-pass factor the
+budget inserts is $z^(-d)$: it translates the group-delay curve by $d$ and does
+not flatten it. Across all six reference targets the measured ripple is identical
+to nine decimal places at every budget the split admits, whether or not the
+linear factor carries energy away from its centre tap.
+
+This is a statement about the construction, not about mixed-phase design. A
+prescribed-phase design over the same latency converts the surplus into flatness
+in proportion, and @phase-regimes reads the two against each other on one axis.
+Its dashed curves are flat while the factorisation still has a minimum-phase
+factor to hold; they fall only past each target's budget ceiling from
+@floor-table, and there they fall because the factor has been starved away rather
+than because the phase has been shaped. At the ceiling itself the low-pass shows
+the gap plainly: 44.9 samples of latency leave the factorisation at its full
+minimum-phase ripple of 1.117 samples, where the prescribed continuum is already
+down to 0.419. The LR4 crossover is the same story, 0.766 against 0.287.
+
+A caller who wants flat group delay must therefore buy it with a prescribed
+phase, not with this budget. What this construction offers instead is
+@latency-accuracy.
+
+#figure(
+  phase-regime-chart(reference-regimes),
+  caption: [
+    How each family spends latency above the group-delay floor, at 129 taps on a
+    1024-point grid. Both axes are normalised per target so six targets share one
+    frame: latency is the fraction of the way from that target's own floor to
+    linear phase, and ripple is relative to its own minimum-phase ripple, so
+    every curve starts at $(0, 1)$ and linear phase is $(1, 0)$. Solid curves
+    prescribe a phase between the endpoints and convert latency into flatness
+    almost proportionally. Dashed curves are the alternating factorisation, which
+    holds its ripple until the budget starves its minimum-phase factor and only
+    then descends. The continuum is drawn to linear phase only; beyond it the
+    family mirrors back to maximum phase, which costs latency without recovering
+    accuracy.
+  ],
+) <phase-regimes>
+
+Two properties of the selection rule should be stated plainly. It does not promise a
 better design on every axis: the selected budget may carry more group delay and
 a larger $E_"rel"$, bounded by $sigma$, and on the steep-crossover fixture it
 accepts both. And $D$ is a strided scan with local refinement rather than every
@@ -352,19 +452,36 @@ and a stride of four, which the reproducibility appendix records.
 = Post-2012 comparison methods
 
 None of the methods in this section was evaluated in the 2012 contribution.
-The repository adds three general comparison paths and one structure-specific
-design to test the historical construction against alternatives under common
-budgets.
+The repository adds three general comparison paths to test the historical
+construction against alternatives under common budgets.
 
 == Prescribed phase <prescribed-phase>
 
-Phase interpolation constructs a target whose unwrapped phase moves between
-the minimum- and linear-phase endpoints and then projects its inverse transform
-onto the finite support. Weighted complex least squares approximates the same
-target directly in coefficient space; Lawson reweighting @lawson1961 trades RMS
-complex error for a lower peak error. That reweighting is multiplicative and
-converges towards its own equilibrium, so a supplied weight has little influence
-left after many passes.
+Phase interpolation constructs a target whose unwrapped phase moves along the
+continuum and then projects its inverse transform onto the finite support. With
+$phi.alt_"lin" (omega) = -omega (N-1) \/ 2$ the prescription is
+
+$
+  phi.alt_mu (omega) = (1 - mu) phi.alt_"min" (omega) + mu phi.alt_"lin" (omega),
+  quad mu in [0, 2],
+$ <phase-mix>
+
+so $mu = 0$ is minimum phase and $mu = 1$ is linear phase. The upper half is not
+an extrapolation into nothing: at $mu = 2$ the prescription is
+$-omega (N-1) - phi.alt_"min"$, which is exactly the maximum-phase response of the
+same magnitude, because negating the phase reverses the impulse response and the
+added full-length delay restores causality. The family is therefore symmetric
+about linear phase, $h_(2 - mu) [n] = h_mu [N - 1 - n]$, which the repository pins
+to $10^(-12)$ against a peak tap of 0.371. Every magnitude measure is
+correspondingly symmetric in $mu$, so the upper half costs latency and returns no
+accuracy; it is implemented because the continuum is only complete with it, not
+because it is a useful place to sit.
+
+Weighted complex least squares approximates the same target directly in
+coefficient space; Lawson reweighting @lawson1961 trades RMS complex error for a
+lower peak error. That reweighting is multiplicative and converges towards its
+own equilibrium, so a supplied weight has little influence left after many
+passes.
 
 Zero-weight bins are genuinely unconstrained. They can diverge even when the
 weighted band is fitted accurately, so weak weights are safer than removing
@@ -379,15 +496,6 @@ uses a penalty ladder and limited-memory BFGS with an analytic gradient. Its
 result depends on the starting point because changing between local basins can
 require moving a zero across the unit circle. Iteration count and penalty
 stages are therefore experimental budgets, not evidence of convergence.
-
-== Structure-specific graphic equalisation <graphic-eq-design>
-
-For octave graphic equalisation, Bruschi, Välimäki, Liski, and Cecchi replace
-the lowest linear-phase FIR band with an IIR shelving filter and retain the FIR
-structure above it @bruschi2022. That approach changes the implementation
-structure rather than selecting a general FIR phase. It belongs in the
-comparison because it buys latency for an important target class, but it is
-not part of the general mixed-phase API.
 
 = Repository evaluation protocol <evaluation-protocol>
 
@@ -495,8 +603,8 @@ after the peak. The paper therefore reports both delay and energy distribution.
 The chart also shows the limit of this metric on its own: within each target
 group the alternating and minimum-phase-truncation bars are near-indistinguishable,
 including on steep-crossover, so pre-peak energy alone does not separate a
-mixed-phase design from a delayed minimum-phase one. @representative-impulse
-and @contrast-impulse make that distinction.
+mixed-phase design from a delayed minimum-phase one. The committed impulse
+artifact carries the coefficient-level evidence that does.
 
 == Cross-target interpretation
 
@@ -518,8 +626,8 @@ proof that metrics with different objectives are interchangeable.
   ],
 ) <cross-target-summary>
 
-The fixed-budget alternating construction has the lowest relative magnitude
-error on
+The fixed-budget alternating construction leads no column on any target: it has
+the lowest relative magnitude error on
 #cross-target-win-count(
   reference-results,
   "budde-iterative",
@@ -529,186 +637,52 @@ error on
   reference-results,
   "budde-iterative",
   "rms_magnitude_error_db",
-) of six — it wins no column on any target, which is the clearest statement of
-the problem @delay-selection addresses. Selecting the budget instead changes
-that outcome completely: the selected-delay variant has the lowest RMS magnitude
+) of six. That is the clearest statement of the problem @delay-selection
+addresses.
+Selecting the budget reverses it: the selected-delay variant leads RMS magnitude
 error on
 #cross-target-win-count(
   reference-results,
   "budde-adaptive",
   "rms_magnitude_error_db",
-) of six targets, the only method to lead a column on every target, and the
-lowest relative magnitude error on
-#cross-target-win-count(
-  reference-results,
-  "budde-adaptive",
-  "relative_magnitude_error",
-) of six. It gives up the relative-error lead only on steep-crossover, where
-@delay-objective spends the slack it is allowed. Minimum-phase truncation leads
-relative error on
-#cross-target-win-count(
-  reference-results,
-  "minphase-truncation",
-  "relative_magnitude_error",
-) of six and RMS error on
-#cross-target-win-count(
-  reference-results,
-  "minphase-truncation",
-  "rms_magnitude_error_db",
-) of six; the selected-delay variant reproduces it exactly wherever it declines
-a budget, so those columns are shared by construction rather than contested.
+) of six, the only method here to lead a column on every target. It shares the
+relative-error column with minimum-phase truncation, because it reproduces that
+design exactly wherever it declines a budget, and gives the lead up only on
+steep-crossover where @delay-objective spends the slack it is allowed.
 
-The low-group-delay optimiser records the lowest mean delay on
-#cross-target-win-count(
-  reference-results,
-  "low-group-delay",
-  "mean_group_delay",
-) of six targets and the smallest coefficient range on
-#cross-target-win-count(
-  reference-results,
-  "low-group-delay",
-  "coefficient_range_db",
-) of six, but it achieves this by solving a different problem with a
-2 dB magnitude constraint. It also has the least pre-peak energy on
-#cross-target-win-count(
-  reference-results,
-  "low-group-delay",
-  "pre_peak_energy_ratio",
-) of six; the low-pass and steep-crossover exceptions show that the lowest mean
-delay need not minimise ringing before the largest coefficient.
+The low-group-delay optimiser leads mean delay and coefficient range, but under a
+different problem with a 2 dB magnitude constraint; its pre-peak energy lead has
+low-pass and steep-crossover exceptions, showing that the lowest mean delay need
+not minimise ringing before the largest coefficient. Complex minimax leads none of
+these magnitude-only columns, which is not a failure of its stated objective —
+Lawson reweighting controls peak complex error, and on the deep notch it improves
+both RMS and maximum dB error over direct phase interpolation.
 
-Complex minimax has no aggregate win in these magnitude-only columns. That is
-not a failure of its stated objective: Lawson reweighting controls peak complex
-error, and in the deep-notch case it improves both RMS and maximum dB error over
-direct phase interpolation.
+The resulting selection rule is conditional. Use the alternating construction with
+a selected budget when fixed-support magnitude fidelity in the dB sense is
+primary; it is never worse than minimum-phase truncation on that measure and is
+decisively better when the target starves the minimum-phase factor. Use
+minimum-phase truncation when a linear-magnitude norm is the specification and
+latency is critical. Use direct low-delay optimisation when delay and coefficient
+range justify an explicit magnitude tolerance, and complex weighting when the
+complex-response norm or band priorities are the specification. The fixed-budget
+alternating design is not recommended for new work; it is retained here as the
+2012 reference point and as the evidence for that conclusion.
 
-These cross-target results support a conditional selection rule. Use the
-alternating construction with a selected budget when fixed-support magnitude
-fidelity in the dB sense is primary; it is never worse than minimum-phase
-truncation on that measure and is decisively better when the target starves the
-minimum-phase factor. Use minimum-phase truncation when a linear-magnitude norm
-is the specification and latency is critical, since it leads that column and
-carries the least delay of the magnitude-faithful designs. Use direct low-delay
-optimisation when delay and coefficient range justify an explicit magnitude
-tolerance, and complex weighting when the complex-response norm or band
-priorities are the actual specification. The fixed-budget alternating design is
-not recommended for new work: every target on which it would be chosen is one
-where @delay-objective selects a different budget, and it is retained here as
-the 2012 reference point and as the evidence for that conclusion.
+== What the delay budget buys
 
-== Representative realised responses
+Only one reference target is support-starved, and it is the only one on which
+the factorisation shapes anything. @contrast-magnitude is therefore the single
+frequency-domain figure worth showing: the degenerate case is by construction
+the $d = 0$ row of @cross-target-summary, and plotting it adds a curve that
+coincides with a curve already there.
 
-The parametric-EQ case exposes frequency-response shape and scalar metrics
-without the ill-conditioned stopband phase of a low-pass example. The impulse
-plot instead uses the fourth-order Linkwitz--Riley 2 kHz low-pass crossover
-fixture from the common suite, whose realised response occupies far more of the
-available support.
-
-Both are smooth targets, so both are degenerate in the sense of
-@evaluation-protocol, and neither on its own can show the alternating
-construction shaping anything. Each is therefore published together with the
-steep-crossover fixture on identical axes. The pairs are the evidence: the
-figures below establish what the degenerate case looks like so that the
-support-starved case can be read against it, and it is the difference between
-the two, not either one alone, that distinguishes a mixed-phase design from a
-delayed minimum-phase filter.
-
-Both examples use realised 129-tap filters at 48 kHz on the 1024-point design
-and analysis grid. The three prescribed-phase designs use $d=16$ samples. The
-alternating design permits at most 12 passes and stops before rising error or
-below a $10^(-7)$ dB change; phase interpolation has no iterative loop; complex
-minimax permits 16 Lawson passes with a $10^(-4)$ stopping tolerance; and
-low-group-delay optimisation uses a 2 dB magnitude tolerance and four stages
-of at most 80 L-BFGS steps. The title-page repository revision identifies the
-commit that produced the artifacts.
-
-#figure(
-  magnitude-response-chart(reference-response),
-  caption: [
-    Target and realised magnitude for the parametric-EQ fixture. The common
-    budget is 48 kHz, $N=129$, and $K=1024$; the prescribed-phase methods use
-    $d=16$, while low-group-delay optimisation has no fixed-delay constraint
-    and instead uses the stated 2 dB magnitude tolerance. Line dash, as well
-    as colour, identifies each method. Source:
-    #code-path("docs/reference-response.csv").
-  ],
-) <representative-magnitude>
-
-@representative-magnitude shows the alternating construction following this
-smooth target closely — 0.0058 dB RMS error against 0.0995 dB for phase
-interpolation and 0.2396 dB for complex minimax, both of which preserve the
-intended bell but introduce visibly larger finite-support error. The
-low-group-delay result spends its allowed magnitude tolerance to move energy
-earlier. The delay-zero baseline is closer still, at 0.0003 dB and a mean delay
-of 6.21 samples against 22.21: on a target this smooth the 16-sample budget buys
-nothing, which is the degeneracy stated in @evaluation-protocol seen in the
-frequency domain.
-
-#figure(
-  group-delay-response-chart(reference-response),
-  caption: [
-    Realised group delay for the same parametric-EQ designs and budgets as
-    @representative-magnitude. Only the weighted 1.8--5 kHz analysis band is
-    shown; each bin is weighted by the squared target magnitude. Group delay
-    outside this band is deliberately excluded rather than interpreted.
-    Source: #code-path("docs/reference-response.csv").
-  ],
-) <representative-group-delay>
-
-The prescribed-phase methods cluster around the same frequency-dependent delay,
-with the alternating response reaching a somewhat higher peak. The phase-free
-optimiser produces the lowest mean delay, but its local solution also contains
-negative group delay in part of the weighted analysis band. That local
-behaviour is visible here and is not captured by a single mean value.
-
-#figure(
-  peak-aligned-impulse-chart(reference-impulse),
-  caption: [
-    Peak-aligned realised impulse responses for the fourth-order
-    Linkwitz--Riley 2 kHz low-pass crossover target and the same tap, grid, and
-    optimiser budgets as @representative-magnitude. Each response is divided
-    by its own absolute peak and displayed as coefficient magnitude in dB,
-    with values below −80 dB clipped to the plot floor. This intentionally
-    discards coefficient sign so low-level temporal detail remains visible.
-    The horizontal origin is each response's peak, so the plot compares
-    temporal distribution rather than gain. Source:
-    #code-path("docs/reference-impulse.csv").
-  ],
-) <representative-impulse>
-
-Peak alignment in @representative-impulse separates waveform shape from
-absolute latency, and on this target the separation is total. The alternating
-and minimum-phase-truncation traces coincide: over the 113 shared aligned
-samples their normalised coefficients differ by at most $3.0 dot 10^(-7)$,
-their peak indices differ by exactly the 16-sample budget (26 against 10), and
-their energy centroids differ by exactly 16.00 samples. Substantial pre-peak
-energy — 44.77% for both — is therefore not evidence of a mixed-phase design:
-the delay-zero baseline has precisely as much. This figure shows the degeneracy
-of @evaluation-protocol rather than contradicting it. Coefficient signs, full
-unnormalised values, peak indices, and the exact pre-peak energy ratios remain
-in the committed CSV and scalar result set.
-
-#figure(
-  peak-aligned-impulse-chart(reference-impulse, target: "steep-crossover"),
-  caption: [
-    Peak-aligned realised impulse responses for the eighth-order 800 Hz
-    crossover target, on axes and budgets identical to
-    @representative-impulse so the two may be read against each other. Source:
-    #code-path("docs/reference-impulse.csv").
-  ],
-) <contrast-impulse>
-
-@contrast-impulse is the same plot on a target whose minimum-phase factor does
-not fit the $N_A$ taps the split allocates. The two traces that coincided in
-@representative-impulse no longer do: their peak-aligned coefficients differ by
-up to $4.3 dot 10^(-2)$, five orders of magnitude more than before, at an equal
-peak index of 51. The alternating design is therefore not a delayed copy of the
-baseline here, which is the regime in which the factorisation is doing work.
-On a normalised dB scale that difference is a fraction of a decibel near the
-peak and is deliberately not claimed to be conspicuous in the figure; the
-separation it produces is a frequency-domain effect, and @contrast-magnitude is
-where it becomes visible. Both bounds are pinned by
-`TestPeakAlignedImpulseSeparatesTheRegimes`.
+The design budget is 48 kHz, realised 129-tap filters on the 1024-point grid.
+The three prescribed-phase designs use $d = 16$; the alternating loop permits at
+most 12 passes and stops before rising error or below a $10^(-7)$ dB change;
+complex minimax permits 16 Lawson passes at a $10^(-4)$ tolerance; and
+low-group-delay optimisation uses a 2 dB magnitude tolerance over four stages of
+at most 80 L-BFGS steps.
 
 #figure(
   magnitude-response-chart(
@@ -726,9 +700,8 @@ where it becomes visible. Both bounds are pinned by
   ),
   caption: [
     Target and realised magnitude for the steep-crossover fixture, under the
-    budgets of @representative-magnitude. Note the axis: this target spans
-    100 dB where the parametric-EQ fixture spans 16, and values below −100 dB
-    are clamped to the plot floor. Source:
+    budgets stated above. Values below −100 dB are clamped to the plot floor.
+    Line dash, as well as colour, identifies each method. Source:
     #code-path("docs/reference-response.csv").
   ],
 ) <contrast-magnitude>
@@ -751,66 +724,126 @@ samples and the curves are not separable at a legible scale. The scalar
 group-delay ripple for every method is in @cross-target-summary and the
 committed CSV.
 
-#let alternating-crossover = reference-results.find(row => (
-  row.at("target") == "crossover" and row.at("method") == "budde-iterative"
-))
-#let alternating-peq = reference-results.find(row => (
-  row.at("target") == "parametric-eq" and row.at("method") == "budde-iterative"
-))
-The committed scalar rows make the distinction explicit: the alternating
-crossover places
-#number(
-  100 * float(alternating-crossover.at("pre_peak_energy_ratio")),
-  digits: 1,
-)\% of its energy before the peak, while the smooth parametric-EQ case rounds
-to
-#number(
-  100 * float(alternating-peq.at("pre_peak_energy_ratio")),
-  digits: 3,
-)\%. The configured $d$ allocates support to the linear factor; it is not by
-itself proof that the target needs or uses that support.
+== Below the floor: trading magnitude for delay <below-the-floor>
+
+Everything so far spends latency above the floor. A controller with a hard
+latency budget below it has the opposite problem, and @delay-floor says the only
+way out is to stop asking for the same magnitude.
+
+That exchange is measurable directly. The low-group-delay optimiser of
+@low-delay-design minimises weighted group delay subject to a magnitude
+tolerance, so widening the tolerance is exactly the question "what does a
+magnitude concession buy in delay". @floor-probe-table walks it from a quarter
+of a decibel to two.
 
 #figure(
-  text(size: 7.5pt)[
-    #representative-results-table(reference-results)
-  ],
+  table(
+    columns: 6,
+    align: (left, right, right, right, right, right),
+    table.header([Target], [$tau_"min"$], [0.25 dB], [0.5 dB], [1 dB], [2 dB]),
+    [Low-pass], [5.86], [5.40], [4.93], [3.93], [1.76],
+    [Parametric EQ], [6.21], [5.75], [5.27], [4.25], [1.93],
+    [LR4 crossover], [10.41], [10.37], [10.28], [10.09], [9.73],
+    [Deep notch], [8.63], [8.59], [8.49], [8.17], [6.67],
+    [Room correction], [0.50], [0.47], [0.42], [0.32], [0.10],
+    [LR8 crossover], [49.37], [49.60], [49.61], [49.52], [49.44],
+  ),
   caption: [
-    Scalar results for the representative parametric-EQ designs, read directly
-    from #code-path("docs/reference-results.csv"). Delay is the
-    magnitude-squared-weighted mean over 1.8--5 kHz; $P$ is the accepted count
-    (alternating passes, Lawson passes, or total L-BFGS steps). The tap, grid,
-    delay, weight, tolerance, and iteration budgets are those stated above.
+    Weighted mean group delay in samples reached by the low-group-delay
+    optimiser as its magnitude tolerance widens, against each target's floor.
+    129 taps, 1024-point grid, four penalty stages of at most 80 L-BFGS steps.
+    Five targets buy delay below their floor, the low-pass most steeply at 70%
+    for 1.90 dB of RMS magnitude error. The LR8 crossover buys nothing: at 129
+    taps its magnitude is already unrealisable, so there is no accuracy left to
+    concede. Source: #code-path("docs/reference-phase-regimes.csv").
   ],
-) <representative-results>
+) <floor-probe-table>
 
-@representative-results makes the trade explicit: the alternating method
-achieves the smallest response errors in this case, whereas the phase-free
-optimiser reduces mean delay by roughly an order of magnitude under a
-different, tolerance-constrained objective. The table is a representative
-case, not a claim that one method dominates every target.
+The ladder stops at 2 dB because wider tolerances stop measuring anything. At
+4 dB the optimiser has not converged and its answer tracks the iteration budget
+rather than the tolerance --- the low-pass reports 33.1, 59.8 or 2.5 samples
+under three different budgets. At 8 dB the constraint admits a spectral null,
+where group delay is undefined; every budget then returns the same meaningless
+figure with the maximum magnitude error saturated at its 60 dB clamp. Both are
+pinned by a test so that the ladder's endpoint is a recorded limit rather than a
+choice of presentation.
 
-== Structure-specific latency and accuracy
+The shape of the exchange is worth noting. It is strongly target-dependent and
+strongly non-linear: the low-pass gives up 70% of its floor across the ladder and
+more than half of that in its last step alone, while the LR4 crossover moves 7%
+over the whole range.
+A latency budget below the floor is therefore not a small perturbation of the
+design problem but a different one, and the honest answer to a controller that
+cannot afford $tau_"min"$ is usually a shallower filter rather than a cleverer
+phase.
 
-The graphic-equaliser comparison is read from
-#code-path("docs/graphiceq-results.csv"). It is kept separate from the general
-FIR comparison because offloading low bands to IIR shelves changes the
-structure and the applicable target class.
+== Longer filters: the budget is a function of the support <length-sweep>
+
+Everything above sits at one operating point, 129 output taps from a 257-tap
+prototype. A loudspeaker controller is not there. It runs filters of several
+hundred to a few thousand taps behind an alignment delay line that is already
+paid for, so it is natural to expect a larger budget to be both affordable and
+useful. Measurement contradicts the second half of that expectation.
+
+#code-path("docs/reference-delay-sweep.csv") sweeps the same six analytic curves
+over output lengths 129, 257, 513 and 1025 with $d$ strided over the admissible
+$[0, (N-1)\/2]$, on a fixed 8192-point grid. It uses 2049-tap fixtures rather
+than the 257-tap ones behind every other figure here, because a 257-tap prototype
+is shorter than a 513-tap filter and every method would reproduce it exactly. The
+two artifacts must not be read against each other, and each sweep row carries the
+prototype length it used.
+
+The result is one-sided enough to state without a figure. Measured as the largest
+RMS dB error any non-zero budget saves against the $d = 0$ design, one of the six
+targets benefits materially and only below about 513 output taps: the
+eighth-order crossover gains 57.19 dB at 129 taps and 23.05 dB at 257, then
+nothing from 513 upwards. Room correction gains hundredths of a decibel, and the
+remaining four gain nothing at any length. The budget is therefore a function of
+the output support, not of the available latency, and a longer filter needs
+_less_ of it, not more.
+The supports explain the ordering: the minimum-phase factor needs 52 taps for the
+LR4 crossover, 53 for the low-pass, 116 for the parametric EQ, 129 for the deep
+notch, 238 for the LR8 crossover and 995 for room correction, measured as the
+leading taps holding all but $10^(-6)$ of its energy. Once $N$ comfortably
+exceeds that support the factor fits at any admissible budget and the correction
+has nothing to recover. Room correction is the instructive exception: its support
+exceeds three of the four lengths, yet a symmetric factor cannot supply the
+broadband tail it is missing.
+
+This also settles what the construction is for. It is not a way to spend latency
+on phase linearity — @ripple-invariance shows it cannot be — but a way to avoid
+spending latency at all.
 
 #figure(
-  graphiceq-chart(graphiceq-results),
+  latency-accuracy-chart(reference-sweep),
   caption: [
-    RMS magnitude error versus realised latency for the hybrid octave graphic
-    equaliser and an all-FIR design constrained to the same latency. Markers
-    are discrete implemented configurations, not a continuous design curve.
-    The ten octave centres span 31.25 Hz to 16 kHz at 48 kHz; one through four
-    low bands are offloaded.
+    Magnitude error against latency, latency being weighted mean group delay in
+    each target's own analysis band. Each dashed curve is one target's
+    linear-phase family, a symmetric FIR of $2L+1$ taps at latency $L$ sampled
+    every 32 samples. Each filled circle is the same target's 1025-tap
+    minimum-phase-led design at $d = 0$; those designs reach $10^(-15)$ dB, so all
+    but room correction clamp to the plot floor, which is set at the $10^(-3)$ dB
+    tolerance the comparison matches on. Both axes are logarithmic. Source:
+    #code-path("docs/reference-delay-sweep.csv").
   ],
-) <graphiceq-tradeoff>
+) <latency-accuracy>
 
-At each shared latency in @graphiceq-tradeoff, the hybrid structure has lower
-RMS error than the shortened all-FIR alternative. This does not generalise to
-arbitrary targets: the shelf cascade cannot reproduce a rapidly alternating
-octave-band “zigzag” without large interaction error.
+The horizontal distance from each circle to its own curve is the comparison a
+latency-bounded application faces, and it is where the construction earns its
+place. A linear-phase filter of latency $L$ has only $2L+1$ taps to spend on the
+magnitude; a minimum-phase-led design of $N$ taps spends all $N$ and carries only
+the latency its own phase implies. Matching the circle's accuracy to within a
+thousandth of a decibel costs linear phase 22 times the latency on the deep
+notch, 19 on the parametric EQ, 18 on the LR4 crossover, 16 on the low-pass and
+8 on the LR8 crossover. On room correction no sampled linear-phase latency
+matches it at all: the circle sits at 0.046 dB and 0.6 samples, while the
+linear-phase family reaches only 0.250 dB at 512 samples.
+
+The price is the group-delay deviation of the minimum-phase factor, 0.8 to 8.0
+samples across these targets, which @ripple-invariance shows no budget can
+reduce. That is the trade to evaluate: a bounded group-delay deviation in
+exchange for the magnitude accuracy of a linear-phase filter an order of
+magnitude longer in latency.
 
 = Failure modes and validity limits <failure-modes>
 
@@ -848,11 +881,11 @@ corresponding row.
         minimum-phase response plus delay despite the available support.
       ],
       [
-        Pre-peak energy does _not_ detect this: on @representative-impulse the
-        degenerate and delay-zero designs agree on it to four decimals.
+        Pre-peak energy does _not_ detect this: on the LR4 crossover fixture
+        the degenerate and delay-zero designs agree on it to four decimals.
         Compare against the same design at $d=0$, or measure the linear
-        factor's energy away from its centre tap, as
-        #code-path("TestSteepTargetActuallyExercisesTheFactorisation") does.
+        factor's energy away from its centre tap, as the appendix's regression
+        for this row does.
         Selecting the budget by @delay-objective removes the mode rather than
         only reporting it, because $d = 0$ then wins whenever it would occur.
       ],
@@ -865,8 +898,7 @@ corresponding row.
       ],
       [
         Do not default the budget. Select it against a stated objective, as
-        @delay-objective does and
-        #code-path("TestSmallDelayBudgetsAreTheWorstChoice") pins. A selection
+        @delay-objective does. A selection
         over a strided candidate set is a heuristic; report the stride, and use
         an exhaustive set when the budget must be optimal.
       ],
@@ -897,18 +929,8 @@ corresponding row.
         can dominate a whole-band delay statistic.
       ],
       [
-        Mask or downweight deep stopbands; publish the evaluated band and
-        weight, as in @representative-group-delay.
-      ],
-
-      [Hybrid graphic EQ],
-      [
-        Rapidly alternating octave gains do not fit the smooth low-shelf
-        cascade and leave large interaction error.
-      ],
-      [
-        Offload only a smooth low-frequency region; retain the all-FIR
-        structure for zigzag-like targets.
+        Mask or downweight deep stopbands, and publish the evaluated band and
+        weight rather than a whole-band curve.
       ],
     )
   ],
@@ -920,18 +942,19 @@ corresponding row.
 ) <failure-mode-table>
 
 The first four rows are algorithmic limitations: stopping, factor utilisation,
-initialisation, or weighting changes the solution. The fifth is a measurement
-limitation and must not be mistaken for filter latency. The sixth is a
-target-class limitation: the hybrid result in @graphiceq-tradeoff applies to
-smooth low-frequency band trajectories, not arbitrary graphic-EQ gain
-sequences.
+initialisation, or weighting changes the solution. The last is a measurement
+limitation and must not be mistaken for filter latency.
 
 = Reproducibility appendix
 
 This appendix covers every public design algorithm and every numbered equation,
 figure, and table in the current draft. Configuration fields not named below
-retain their documented zero-value defaults. The build embeds the repository
+retain their documented zero-value defaults, and the build embeds the repository
 revision shown on the title page.
+
+Unless an entry states otherwise, its evidence is reproduced by
+`go test ./mixedphase`, its artifacts by `just compare-check`, and its figures by
+`just paper`; only exceptions are named per entry.
 
 == Algorithms and analysis
 
@@ -977,7 +1000,7 @@ revision shown on the title page.
     #code-path("TestIterativeMethodsReachComparableQuality"). _Reference
       budget:_ the figures use #code-path("MethodCepstrum") on $K=1024$ with the
     scale-relative floor; #code-path("MethodHilbert") is the independently
-    tested alternative. _Reproduce:_ `go test ./mixedphase`.
+    tested alternative.
 
   - *Phase interpolation, @prescribed-phase.* _Implementation:_
     #code-path("mixedphase.DesignPhaseInterpolation"). _Evidence:_
@@ -985,7 +1008,6 @@ revision shown on the title page.
     #code-path("TestUniformWeightMatchesPhaseInterpolation"). _Reference
       budget:_ #code-path("Length=129"), #code-path("FFTSize=1024"),
     #code-path("Mix=0.25"), #code-path("MethodCepstrum"), default floor.
-    _Reproduce:_ `go test ./mixedphase`.
 
   - *Weighted complex approximation, @prescribed-phase.* _Implementation:_
     #code-path("mixedphase.DesignComplexLeastSquares"). _Evidence:_
@@ -994,8 +1016,7 @@ revision shown on the title page.
     #code-path("TestUnweightedBandsAreUnconstrained"). _Reference budget:_
     #code-path("Length=129"), #code-path("FFTSize=1024"),
     #code-path("Mix=0.25"), uniform initial weight, 16 Lawson passes, and the
-    default $10^(-4)$ minimax tolerance. _Reproduce:_
-    `go test ./mixedphase`.
+    default $10^(-4)$ minimax tolerance.
 
   - *Low-group-delay optimisation, @low-delay-design.* _Implementation:_
     #code-path("mixedphase.DesignLowGroupDelay"). _Evidence:_
@@ -1005,17 +1026,7 @@ revision shown on the title page.
     #code-path("Length=129"), #code-path("FFTSize=1024"), 2 dB magnitude
     tolerance, target-specific #code-path("DelayWeight"), four penalty stages,
     80 L-BFGS steps per stage, unit initial penalty, and the default
-    minimum-phase start. _Reproduce:_ `go test ./mixedphase`.
-
-  - *Hybrid graphic equaliser, @graphic-eq-design.* _Implementation:_
-    #code-path("graphiceq.Design") and #code-path("graphiceq.DefaultLength").
-    _Evidence:_ #code-path("TestDefaultLengthHalvesPerOffloadedBand"),
-    #code-path("TestHybridBeatsEqualLatencyFIR"), and
-    #code-path("TestImpulseResponseMatchesMetrics"). _Reference budget:_ ten
-    octave bands from 31.25 Hz to 16 kHz at 48 kHz with gains
-    $(6,-3,0,4,-6,2,0,-2,5,0)$ dB, #code-path("IIRBands=0..4"), default
-    #code-path("Q=1"), default FFT grid, and rectangular FIR window.
-    _Reproduce:_ `go test ./graphiceq`.
+    minimum-phase start.
 
   - *Common realised-response analysis.* _Implementation:_
     #code-path("mixedphase.Analyze"), #code-path("internal/reference.Run"), and
@@ -1043,7 +1054,6 @@ revision shown on the title page.
     #code-path("TestIterativeZeroDelayIsMinimumPhaseEndpoint"), and
     #code-path("TestIterativeMaximumDelayIsLinearPhaseEndpoint"). _Budget:_ all
     valid $0 <= d <= (N - 1) / 2$; the reference row uses $N=129$, $d=16$.
-    _Reproduce:_ `go test ./mixedphase`; rebuild with `just paper`.
 
   - *@accuracy-delay and @pre-ringing.* _Generator:_
     #code-path("examples/mixedphase") through
@@ -1051,8 +1061,7 @@ revision shown on the title page.
     #code-path("docs/reference-results.csv"), whose schema and budgets are
     asserted by #code-path("TestRunCoversEveryMethodAndMetric"). _Budget:_ the
     general reference budgets listed above; iteration values in the CSV are
-    accepted counts, not maxima. _Reproduce:_ `just compare-check`; rebuild
-    with `just paper`.
+    accepted counts, not maxima.
 
   - *@cross-target-summary.* _Generator:_ the
     #code-path("cross-target-summary-table") Typst helper computes every count
@@ -1060,79 +1069,121 @@ revision shown on the title page.
     byte-compared by #code-path("TestRunCoversEveryMethodAndMetric"). _Budget:_
     the six-target common reference budget listed under “Common realised-
     response analysis”; no summary value is stored in the Typst source.
-    _Reproduce:_ `just compare-check`; rebuild with `just paper`.
 
-  - *@representative-magnitude, @representative-group-delay,
-      @representative-impulse, @contrast-impulse, @contrast-magnitude, and
-      @representative-results.* _Generator:_
+  - *@contrast-magnitude.* _Generator:_
     #code-path("internal/reference.RepresentativeResponses"), invoked by
-    #code-path("examples/mixedphase"). _Artifacts:_
-    #code-path("docs/reference-response.csv"),
-    #code-path("docs/reference-impulse.csv"), and
-    #code-path("docs/reference-results.csv"); all three are byte-compared by
-    #code-path("TestRepresentativeResponsesCoverRealisedDesigns") or
-    #code-path("TestRunCoversEveryMethodAndMetric"). _Budget:_ the
-    parametric-EQ response target and fourth-order Linkwitz--Riley 2 kHz
-    low-pass crossover impulse target at 48 kHz, $N=129$, $K=1024$, $d=16$ for
-    prescribed phase, and the exact weights, tolerances, and iteration limits
-    listed under “Representative realised responses.” Both artifacts
-    additionally carry the steep-crossover target under the same budget, which
-    is what @contrast-impulse and @contrast-magnitude plot; the published target
-    lists are
+    #code-path("examples/mixedphase"). _Artifact:_
+    #code-path("docs/reference-response.csv"), byte-compared by
+    #code-path("TestRepresentativeResponsesCoverRealisedDesigns"). _Budget:_ the
+    steep-crossover target at 48 kHz, $N=129$, $K=1024$, $d=16$ for prescribed
+    phase, and the weights, tolerances, and iteration limits listed under “What
+    the delay budget buys.” The artifact also carries the parametric-EQ and LR4
+    crossover targets under the same budget; the published target lists are
     #code-path("reference.ResponseTargets") and
-    #code-path("reference.ImpulseTargets"), and
-    #code-path("TestRepresentativeResponsesCoverRealisedDesigns") fails if
-    either shrinks to a single target. The reference test also requires the
-    plotted alternating crossover to place at least 10% of its energy and at
-    least eight coefficients above −40 dB before its peak, while
-    #code-path("TestPeakAlignedImpulseSeparatesTheRegimes") pins the
-    $3.0 dot 10^(-7)$ and $4.3 dot 10^(-2)$ deviations quoted for the two
-    impulse figures. _Reproduce:_ `just compare-check`; rebuild with
-    `just paper`.
+    #code-path("reference.ImpulseTargets"), and the same test fails if either
+    shrinks to a single target.
 
-  - *@graphiceq-tradeoff.* _Generator:_ #code-path("examples/graphiceq").
-    _Artifact:_ #code-path("docs/graphiceq-results.csv"). Each hybrid split is
-    paired with an all-FIR #code-path("graphiceq.Design") whose
-    #code-path("Length") equals the hybrid tap count. _Budget:_ the graphic-EQ
-    configuration listed above. _Reproduce:_ `just compare-check`; rebuild
-    with `just paper`.
+  - *@latency-accuracy and the budget-gain figures quoted in @length-sweep.*
+    _Generator:_
+    #code-path("internal/reference.SweepRows"), invoked by
+    #code-path("examples/mixedphase -sweep"). _Artifact:_
+    #code-path("docs/reference-delay-sweep.csv"), byte-compared by
+    #code-path("TestCommittedSweepCSVIsReproducible"). _Budget:_ the six
+    reference curves rebuilt as 2049-tap fixtures on a 16384-point target grid,
+    designed at 129, 257, 513, and 1025 output taps on a fixed 8192-point
+    design and analysis grid with at most 12 correction passes; $d$ strided
+    every $(N-1)\/32$ samples, and the linear-phase family sampled every 32
+    samples of latency. _Evidence:_
+    #code-path("TestSweepDelayBudgetStopsPayingAsLengthGrows") and
+    #code-path("TestSweepBudgetGainTableMatchesTheDocumentation") pin the gain
+    figures; #code-path("TestSweepLinearPhaseNeedsFarMoreLatency") pins the
+    latency factors; #code-path("TestSweepMinimumPhaseSupportBoundsTheBudget")
+    pins the minimum-phase supports; and
+    #code-path("TestSweepLinearPhaseHasNoRipple") pins the reference family's
+    zero ripple.
+
+  - *@floor-table, @phase-regimes and @floor-probe-table.* _Generator:_
+    #code-path("internal/reference.RegimeRows"), invoked by
+    #code-path("examples/mixedphase -regimes"). _Artifact:_
+    #code-path("docs/reference-phase-regimes.csv"), byte-compared by
+    #code-path("TestCommittedRegimesCSVIsReproducible"). _Budget:_ the published
+    fixtures and operating point — the six 257-tap curves at $N=129$ on a
+    1024-point grid — so that every row is comparable with @cross-target-summary
+    rather than being a separate experiment. Three families: the prescribed
+    continuum over $mu in [0, 2]$ in steps of $1\/8$; the alternating
+    factorisation over $d in [0, 64]$ in steps of 4 at 12 correction passes; and
+    the low-group-delay optimiser at 0.25, 0.5, 1, and 2 dB over four penalty
+    stages of at most 80 L-BFGS steps. _Evidence:_
+    #code-path("TestZeroDelayDesignSitsOnTheMinimumPhaseFloor") establishes that
+    the floors are the target's and not the split's;
+    #code-path("TestFactorisationHoldsItsRippleWhileTheContinuumDescends") pins
+    the contrast and the budget ceilings;
+    #code-path("TestContinuumGroupDelayIsLinearInMix") and
+    #code-path("TestContinuumRippleIsSymmetricAndVanishesAtLinearPhase") pin the
+    continuum's shape; #code-path("TestFloorProbeTradesMagnitudeForDelayBelowTheFloor")
+    pins the below-floor exchange including the starved target's exception; and
+    #code-path("TestLooseToleranceLeavesTheMeasurableRegime") records why the
+    ladder stops at 2 dB. The reflection identity behind @phase-mix is pinned by
+    #code-path("TestPhaseContinuumReflectsAboutLinearPhase").
 
   - *@failure-mode-table.* _Implementation and evidence:_ correction-loop
     instability is guarded by
     #code-path("TestIterativeStopsBeforeRisingError") and
-    #code-path("TestIterativeConditioning"); support utilisation by the
+    #code-path("TestIterativeConditioning"); support utilisation by
+    #code-path("TestSteepTargetActuallyExercisesTheFactorisation") and the
     alternating crossover assertions in
     #code-path("TestRepresentativeResponsesCoverRealisedDesigns");
+    hand-picked budgets by
+    #code-path("TestSmallDelayBudgetsAreTheWorstChoice");
     initialisation sensitivity by
     #code-path("TestLowGroupDelayDependsOnInitialisation"); zero-weight bins by
     #code-path("TestUnweightedBandsAreUnconstrained"); stopband-delay masking by
     #code-path("TestDefaultDelayWeightMasksSpectralNulls") and
-    #code-path("mixedphase.delayWeights"); and the graphic-EQ target-class limit
-    by #code-path("TestZigzagTargetDefeatsTheSplit"). _Budget:_ each named test
-    owns and asserts its deterministic fixture; the table introduces no
-    hand-entered numerical result. _Reproduce:_ `go test ./mixedphase`;
-    `go test ./graphiceq`; rebuild with `just paper`.
+    #code-path("mixedphase.delayWeights"); and the group-delay invariance of
+    @ripple-identity by
+    #code-path("TestAdaptiveDelayBudgetCannotFlattenGroupDelay"). _Budget:_ each
+    named test owns and asserts its deterministic fixture; the table introduces
+    no hand-entered numerical result. _Reproduce:_ `go test ./mixedphase`;
+    `go test ./internal/reference`; rebuild with `just paper`.
 ]
 
 The Typst source, bibliography, generated figure inputs, and build workflow
 live beside the implementation; the PDF is a build artifact. There are no
-hand-entered quantitative results: @representative-results and every plot read
-committed CSV fields directly.
+hand-entered quantitative results: every table and plot reads committed CSV
+fields directly.
 
 = Limitations and open work
 
-The comparison is limited to six fixed targets, one 129-tap output budget,
-and the stated optimiser budgets; it does not establish asymptotic convergence
-or perceptual preference. The delay selection of @delay-selection is evaluated
-under one slack and one candidate stride, and its candidate set is not
-exhaustive; the choice of RMS dB error as its objective is an engineering
-judgement about which error a fixed-support design should protect, not a result.
-Only one of the six targets starves the minimum-phase factor, so the advantage
-that selection produces rests on a single fixture of that class. The original signal-flow figures are redrawn only as
-a qualitative structural diagram; their response example has not been
-reconstructed because no machine-readable source data were published.
+The six-method comparison is limited to six fixed targets at one 129-tap output
+budget; only the sweep of @length-sweep varies the support, and it compares two
+families rather than all six methods. The delay selection of @delay-selection is
+evaluated under one slack, one improvement margin, and one candidate stride, and
+its candidate set is not exhaustive; the choice of RMS dB error as its objective
+is an engineering judgement about which error a fixed-support design should
+protect, not a result.
+
+Only one of the six targets starves the minimum-phase factor, so both the case
+for a non-zero budget and the case against it above 513 taps rest on a single
+fixture of that class. The latency factors of @latency-accuracy are quantised by
+the 32-sample sampling of the linear-phase family, and all of them are measured
+as weighted mean group delay in each target's own analysis band rather than as
+an implementable end-to-end latency. Every target here is zero-phase, so no
+method is asked to fit a prescribed excess phase.
+
+The floors of @floor-table and the exchange of @floor-probe-table are measured at
+one support, so both are properties of these targets at 129 taps rather than of
+the target curves alone; the floor in particular falls as the support grows and
+the minimum-phase response is no longer truncated. The below-floor ladder is
+bounded above by the optimiser's convergence rather than by the physics, so it
+measures what this solver can reach, not the best achievable exchange. The
+maximum-phase half of the continuum is included for completeness and is dominated
+throughout: being the exact time reverse of the minimum-phase design, it costs
+the most latency of any point on the continuum and recovers no accuracy for it.
+
 Perceptual evaluation is limited to objective pre-ringing and delay proxies;
-controlled listening tests are outside the present scope.
+controlled listening tests are outside the present scope. The group-delay
+deviation the construction leaves in place, 0.8 to 8.0 samples across these
+targets, is exactly the quantity such a test would have to bound.
 
 = Conclusion
 
@@ -1143,32 +1194,59 @@ support. The exact support equation, regularisation, stop-before-rise policy,
 delay selection, comparison methods, failure analysis, and benchmark evidence
 belong to this revision.
 
-The benchmark's principal finding concerns the budget rather than the
-factorisation. With the delay budget fixed at 16 samples the construction leads
-no metric on any of the six targets: on the five whose minimum-phase factor fits
-the allocated support it is a delayed minimum-phase filter, which the same code
-produces at $d = 0$ with 10 to 16 fewer samples of latency and no more error.
-That is a property of the fixed budget, not of the factorisation, and it is
-correctable. Treating the budget as an output of a stated objective —
-@delay-objective — makes the construction lead realised RMS dB magnitude error
-on all six targets, the only method here to lead a column outright, while
-declining the budget entirely wherever it would be wasted. On the one target
-that starves the minimum-phase factor, selection reaches 3.310 dB against
-6.901 dB for the fixed budget and 42.838 dB for the best competing method, at
-2.63 samples more mean group delay than minimum-phase truncation and 71 dB more
-stopband rejection. What the factorisation buys is stopband depth at fixed
-support, and it is worth buying only when the target's minimum-phase response
-does not fit the taps the split leaves it — a condition that can be tested
-before designing.
+Reading it against the floor of @group-delay-floor settles what its delay budget
+is for. Latency above the floor is an all-pass factor, and this construction
+takes the trivial one: the symmetric factor contributes exactly linear phase, so
+@ripple-identity holds and the budget shifts the group-delay curve without
+flattening it. A prescribed phase over the same latency does flatten it —
+1.117 samples of ripple against 0.419 on the low-pass at equal delay — so the
+limitation belongs to the construction rather than to the latency. The budget
+also cannot buy accuracy once the support is sufficient: across 129 to 1025
+output taps a non-zero budget is worth more than a decibel on one of six targets
+and only below 513 taps. A longer filter behind a generous delay line therefore
+wants a _smaller_ budget, not a larger one, which is the opposite of the natural
+expectation.
 
-More broadly, mixed-phase FIR design is not one optimisation problem but a
-family of choices about which phase information to preserve, which error to
-minimise, and how to spend finite support. This revision makes those choices
-and their provenance explicit and binds its new evidence to executable designs.
-Across the fixed reference suite, alternating correction with a selected budget
-is the consistent dB-accuracy choice, minimum-phase truncation the consistent
-linear-magnitude choice, and the phase-free optimiser the consistent mean-delay
-choice; none of these conclusions extends beyond the stated targets, weights,
-and budgets.
+Below the floor the currency changes. No phase choice recovers a latency budget
+smaller than $tau_"min"$, and the six targets concede between 7% and 70% of their
+floor for one to two decibels of magnitude error — or, for the eighth-order
+crossover at 129 taps, nothing at all, because its magnitude is already beyond
+the support.
+
+Held fixed at 16 samples the budget leads no metric on any of the six targets,
+because on the five whose minimum-phase factor fits the allocated support the
+design is a delayed minimum-phase filter that the same code produces at $d = 0$
+with 10 to 16 fewer samples of latency. That is a property of the fixed budget,
+not of the factorisation, and it is correctable: selecting the budget by
+@delay-objective makes the construction lead realised RMS dB magnitude error on
+all six targets — the only method here to lead a column outright — while declining
+the budget wherever it would be wasted, and reaching 3.310 dB on the one starved
+target against 6.901 dB for the fixed budget.
+
+The construction's real advantage is elsewhere, and it is larger. At matched
+magnitude accuracy a linear-phase filter needs 8 to 22 times the latency of a
+minimum-phase-led design of the same tap count, and on a broadband
+room-correction target it does not match it at any latency measured. The price is
+the minimum-phase factor's group-delay deviation, which no budget reduces. So the
+design question this construction answers is not how to spend a latency budget on
+phase linearity, but how to avoid spending one at all — and the delay budget is a
+support-recovery control to be used sparingly, on short filters and steep
+targets, not a latency dial.
+
+The two applications that motivate the work therefore want different controls. An
+equaliser or room correction wants the phase continuum itself exposed, a single
+parameter running from minimum through linear to maximum phase with latency as
+the consequence. A loudspeaker controller, which already pays an alignment delay,
+wants to know its floor first: the budget it can usefully spend is what remains
+after the magnitude request has taken its share, and on a steep crossover that
+remainder is often nothing.
+
+More broadly, mixed-phase FIR design is not one optimisation problem but a family
+of choices about which phase information to preserve, which error to minimise, and
+how to spend finite support. Across this reference suite, alternating correction
+with a selected budget is the consistent dB-accuracy choice, minimum-phase
+truncation the consistent linear-magnitude choice, and the phase-free optimiser the
+consistent mean-delay choice; none of these conclusions extends beyond the stated
+targets, weights, and budgets.
 
 #bibliography("references.bib", style: "ieee", title: "References")

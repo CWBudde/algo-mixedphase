@@ -704,10 +704,18 @@ func TestDesignValidation(t *testing.T) {
 
 	_, err = DesignPhaseInterpolation(
 		[]float64{1},
-		PhaseInterpolationConfig{Mix: 1.1},
+		PhaseInterpolationConfig{Mix: 2.1},
 	)
 	if !errors.Is(err, ErrInvalidPhaseMix) {
-		t.Fatalf("invalid phase mix error = %v", err)
+		t.Fatalf("above-range phase mix error = %v", err)
+	}
+
+	_, err = DesignPhaseInterpolation(
+		[]float64{1},
+		PhaseInterpolationConfig{Mix: -0.1},
+	)
+	if !errors.Is(err, ErrInvalidPhaseMix) {
+		t.Fatalf("below-range phase mix error = %v", err)
 	}
 
 	_, err = DesignPhaseInterpolation(
@@ -747,6 +755,98 @@ func TestPhaseInterpolationHandlesPhaseWraps(t *testing.T) {
 				result.Metrics.RelativeMagnitudeError,
 			)
 		}
+	}
+}
+
+// TestPhaseContinuumReflectsAboutLinearPhase pins the identity that closes the
+// phase continuum at maximum phase: designing at mix 2-m returns the exact time
+// reverse of the design at mix m. Minimum and maximum phase are the m=0 case.
+//
+// The identity is what makes the upper half of the range meaningful rather than
+// merely accepted, and it is exact rather than approximate, so a loose
+// tolerance here would hide a real regression in prescribedResponse.
+func TestPhaseContinuumReflectsAboutLinearPhase(t *testing.T) {
+	const (
+		length          = 129
+		fftSize         = 4096
+		tolerance       = 1e-12
+		metricTolerance = 1e-9
+		peakTapMin      = 0.3
+	)
+
+	prototype := lowpassPrototype(257, 0.25)
+
+	design := func(mix float64) Result {
+		t.Helper()
+
+		result, err := DesignPhaseInterpolation(
+			prototype,
+			PhaseInterpolationConfig{
+				Length:  length,
+				Mix:     mix,
+				FFTSize: fftSize,
+			},
+		)
+		if err != nil {
+			t.Fatalf("DesignPhaseInterpolation(mix=%g) error = %v", mix, err)
+		}
+
+		return result
+	}
+
+	for _, mix := range []float64{0, 0.25, 0.5, 0.75, 1} {
+		forward := design(mix)
+		reflected := design(maximumPhaseMix - mix)
+
+		worst := 0.0
+
+		for i, tap := range reflected.Taps {
+			mirror := forward.Taps[len(forward.Taps)-1-i]
+			worst = max(worst, math.Abs(tap-mirror))
+		}
+
+		if worst > tolerance {
+			t.Errorf(
+				"mix=%g: worst deviation from the reversed mix=%g design = %g, want <= %g",
+				maximumPhaseMix-mix,
+				mix,
+				worst,
+				tolerance,
+			)
+		}
+
+		// Time reversal leaves the magnitude response untouched, so every
+		// magnitude measure must be symmetric about linear phase. This is the
+		// consequence callers actually rely on: maximum phase costs the most
+		// latency without buying any magnitude accuracy back.
+		//
+		// The two are computed from separately transformed tap vectors that
+		// agree only to round-off, so they agree to about thirteen digits
+		// rather than bit-for-bit.
+		forwardDB := forward.Metrics.RMSMagnitudeErrorDB
+		reflectedDB := reflected.Metrics.RMSMagnitudeErrorDB
+
+		if math.Abs(forwardDB-reflectedDB) > metricTolerance*math.Abs(forwardDB) {
+			t.Errorf(
+				"mix=%g RMS dB error = %g, mix=%g gives %g, want equal within %g relative",
+				mix,
+				forwardDB,
+				maximumPhaseMix-mix,
+				reflectedDB,
+				metricTolerance,
+			)
+		}
+	}
+
+	// Guard the tolerance against a degenerate fixture: an all-but-zero impulse
+	// response would satisfy the identity trivially.
+	peak := 0.0
+	for _, tap := range design(0).Taps {
+		peak = max(peak, math.Abs(tap))
+	}
+
+	if peak < peakTapMin {
+		t.Fatalf("fixture peak tap = %g, want >= %g for the tolerance to mean anything", peak, peakTapMin)
 	}
 }
 

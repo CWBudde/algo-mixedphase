@@ -5,13 +5,24 @@ import (
 	"math/cmplx"
 )
 
+// maximumPhaseMix is the mix at which the prescribed phase reaches maximum
+// phase, and therefore the upper bound both direct designs accept.
+//
+// The prescription is phi(mix) = (1-mix)*phi_min + mix*phi_lin with
+// phi_lin = -omega*(N-1)/2, so mix = 2 gives phi = -omega*(N-1) - phi_min. For
+// a real response that is exactly the maximum-phase spectrum of the same
+// magnitude: negating the phase reverses the impulse response about the origin
+// and the added full-length delay makes it causal again. The continuum
+// therefore closes at two rather than at one.
+const maximumPhaseMix = 2.0
+
 // prescribedResponse builds the conjugate-symmetric complex target whose
 // magnitude follows targetMagnitude and whose phase interpolates between the
 // unwrapped minimum phase and a pure delay of the given number of samples.
 //
-// A mix of zero prescribes minimum phase, a mix of one prescribes linear phase.
-// Everything in between is the mixed-phase family both direct designs
-// approximate.
+// A mix of zero prescribes minimum phase, one prescribes linear phase and
+// [maximumPhaseMix] prescribes maximum phase. Everything in between is the
+// mixed-phase family both direct designs approximate.
 //
 // minimumPhase must be the continuous phase produced by [minimumPhaseSpectrum]
 // rather than one recovered from a spectrum. Interpolating a wrapped phase is

@@ -472,7 +472,7 @@ func TestComplexLeastSquaresValidation(t *testing.T) {
 		want error
 	}{
 		{"mix below range", ComplexLeastSquaresConfig{Mix: -0.1}, ErrInvalidPhaseMix},
-		{"mix above range", ComplexLeastSquaresConfig{Mix: 1.1}, ErrInvalidPhaseMix},
+		{"mix above range", ComplexLeastSquaresConfig{Mix: 2.1}, ErrInvalidPhaseMix},
 		{"negative epsilon", ComplexLeastSquaresConfig{Epsilon: -1}, ErrInvalidEpsilon},
 		{
 			"unknown method",

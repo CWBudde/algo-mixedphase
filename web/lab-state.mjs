@@ -14,6 +14,19 @@ export function usesDelayControl(method) {
   return !CHOOSES_DELAY.includes(method);
 }
 
+// Methods whose phase is a prescribed curve rather than a support split. Their
+// slider spans the whole continuum — minimum phase, through linear phase at the
+// midpoint, to maximum phase at the end — so it reaches twice as far as the
+// factorisation's, which stops once the linear factor has consumed the filter.
+// Mirrors labresponse.PrescribesPhase; a mismatch would silently clamp.
+export const PRESCRIBES_PHASE = Object.freeze(["interpolation", "minimax"]);
+
+export function maximumDelayFor(method, length) {
+  const linearPhase = (length - 1) / 2;
+
+  return PRESCRIBES_PHASE.includes(method) ? 2 * linearPhase : linearPhase;
+}
+
 // LOWPASS_TARGET is the lab's own fixture and the only one whose shape the
 // cutoff slider controls. Every other entry is a fixed comparison target taken
 // from the published benchmark, so selecting one at the published tap and delay
@@ -152,7 +165,10 @@ export const PRESETS = Object.freeze([
 const LIMITS = Object.freeze({
   length: [33, 257],
   cutoff: [0.02, 0.4],
-  delay: [0, 128],
+  // The upper bound is the longest support's maximum-phase end, 2*(257-1)/2.
+  // The per-method ceiling in normaliseDesign is the one that actually binds;
+  // this only rejects nonsense from a hand-edited URL.
+  delay: [0, 256],
   tolerance: [0.1, 12],
   iterations: [1, 120],
 });
@@ -167,16 +183,19 @@ function numberWithin(value, fallback, [minimum, maximum], integer = false) {
   return integer ? Math.round(clamped) : clamped;
 }
 
-function normaliseDesign(candidate, fallback, maximumDelay) {
+function normaliseDesign(candidate, fallback, length) {
   const method = Object.hasOwn(METHODS, candidate?.method)
     ? candidate.method
     : fallback.method;
 
   return {
     method,
+    // The ceiling depends on the method, because the prescribed-phase designs
+    // read the slider as a position on the phase continuum and so run twice as
+    // far as the factorisation's support split.
     delay: Math.min(
       numberWithin(candidate?.delay, fallback.delay, LIMITS.delay, true),
-      maximumDelay,
+      maximumDelayFor(method, length),
     ),
     tolerance: numberWithin(
       candidate?.tolerance,
@@ -201,8 +220,6 @@ export function normaliseExperiment(candidate = {}) {
   );
   length = 33 + Math.round((length - 33) / 8) * 8;
 
-  const maximumDelay = (length - 1) / 2;
-
   return {
     preset: PRESETS.some(({ id }) => id === candidate.preset)
       ? candidate.preset
@@ -216,8 +233,8 @@ export function normaliseExperiment(candidate = {}) {
       DEFAULT_EXPERIMENT.cutoff,
       LIMITS.cutoff,
     ),
-    a: normaliseDesign(candidate.a, DEFAULT_EXPERIMENT.a, maximumDelay),
-    b: normaliseDesign(candidate.b, DEFAULT_EXPERIMENT.b, maximumDelay),
+    a: normaliseDesign(candidate.a, DEFAULT_EXPERIMENT.a, length),
+    b: normaliseDesign(candidate.b, DEFAULT_EXPERIMENT.b, length),
   };
 }
 

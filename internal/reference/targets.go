@@ -29,12 +29,47 @@ type roomPoint struct {
 	response  float64
 }
 
-// Targets constructs the fixed reference targets.
+// Targets constructs the fixed reference targets at the published budgets.
 //
 // The first five are smooth curves whose minimum-phase factor fits comfortably
 // inside the tap budget. steep-crossover does not, and that is the point of
 // including it: see its definition below.
 func Targets() ([]Target, error) {
+	return targetsFor(prototypeLength, targetFFTSize, FFTSize)
+}
+
+// targetsFor constructs the same six curves at an arbitrary prototype length and
+// on arbitrary grids.
+//
+// The curves themselves are analytic and carry no length, so a longer prototype
+// represents the same physical response more completely rather than a different
+// one. That is what makes a length sweep meaningful: at 257 taps an eighth-order
+// 800 Hz crossover is itself already truncated, so a 513-tap design would be
+// measured against a target shorter than the filter and every method would score
+// alike.
+//
+//   - prototypeTaps is the fixture length. It must not exceed targetFFT.
+//   - targetFFT is the grid the zero-phase magnitude is sampled and inverted on.
+//   - weightGrid is the grid the delay and magnitude weights are built for, and
+//     must match the grid the designs and the analysis run on.
+func targetsFor(prototypeTaps, targetFFT, weightGrid int) ([]Target, error) {
+	if prototypeTaps <= 0 || targetFFT <= 0 || weightGrid <= 0 {
+		return nil, fmt.Errorf(
+			"reference: prototype %d, target grid %d and weight grid %d must all be positive",
+			prototypeTaps,
+			targetFFT,
+			weightGrid,
+		)
+	}
+
+	if prototypeTaps > targetFFT {
+		return nil, fmt.Errorf(
+			"reference: prototype length %d exceeds the target grid %d",
+			prototypeTaps,
+			targetFFT,
+		)
+	}
+
 	roomPoints, err := parseRoomResponse(roomResponseCSV)
 	if err != nil {
 		return nil, err
@@ -106,7 +141,11 @@ func Targets() ([]Target, error) {
 
 	targets := make([]Target, 0, len(definitions))
 	for _, definition := range definitions {
-		prototype, buildErr := buildPrototype(definition.curve)
+		prototype, buildErr := buildPrototype(
+			definition.curve,
+			prototypeTaps,
+			targetFFT,
+		)
 		if buildErr != nil {
 			return nil, fmt.Errorf(
 				"reference: build %s target: %w",
@@ -121,8 +160,9 @@ func Targets() ([]Target, error) {
 			DelayWeight: buildDelayWeight(
 				definition.curve,
 				definition.delayBand,
+				weightGrid,
 			),
-			MagnitudeWeight: buildMagnitudeWeight(definition.curve),
+			MagnitudeWeight: buildMagnitudeWeight(definition.curve, weightGrid),
 		})
 	}
 
@@ -198,48 +238,51 @@ func roomCorrection(points []roomPoint) magnitudeCurve {
 }
 
 // buildPrototype samples a zero-phase magnitude curve, transforms it, and
-// windows the result to the fixed prototype length.
+// windows the result to the requested prototype length.
 //
 // Every target here is zero-phase. That is a deliberate limitation rather than
 // an oversight: none of the compared designs fits a prescribed excess phase —
 // each one synthesises phase from the magnitude alone — so a target carrying
 // excess phase would produce identical rows for every method and measure
 // nothing. See the failure-mode notes in the package docs.
-func buildPrototype(curve magnitudeCurve) ([]float64, error) {
-	plan, err := algofft.NewPlan64(targetFFTSize)
+func buildPrototype(
+	curve magnitudeCurve,
+	length, gridSize int,
+) ([]float64, error) {
+	plan, err := algofft.NewPlan64(gridSize)
 	if err != nil {
 		return nil, fmt.Errorf("create target FFT plan: %w", err)
 	}
 
-	spectrum := make([]complex128, targetFFTSize)
+	spectrum := make([]complex128, gridSize)
 
-	for bin := range targetFFTSize/2 + 1 {
-		frequency := float64(bin) * SampleRate / targetFFTSize
+	for bin := range gridSize/2 + 1 {
+		frequency := float64(bin) * SampleRate / float64(gridSize)
 		spectrum[bin] = complex(curve(frequency), 0)
 
-		if bin > 0 && bin < targetFFTSize/2 {
-			spectrum[targetFFTSize-bin] = spectrum[bin]
+		if bin > 0 && bin < gridSize/2 {
+			spectrum[gridSize-bin] = spectrum[bin]
 		}
 	}
 
-	periodic := make([]complex128, targetFFTSize)
+	periodic := make([]complex128, gridSize)
 	if err := plan.Inverse(periodic, spectrum); err != nil {
 		return nil, fmt.Errorf("inverse target FFT: %w", err)
 	}
 
-	prototype := make([]float64, prototypeLength)
-	middle := prototypeLength / 2
+	prototype := make([]float64, length)
+	middle := length / 2
 
 	for index := range prototype {
 		offset := index - middle
 
 		source := offset
 		if source < 0 {
-			source += targetFFTSize
+			source += gridSize
 		}
 
 		window := 0.5 - 0.5*math.Cos(
-			2*math.Pi*float64(index)/float64(prototypeLength-1),
+			2*math.Pi*float64(index)/float64(length-1),
 		)
 		prototype[index] = real(periodic[source]) * window
 	}
@@ -266,10 +309,11 @@ func buildPrototype(curve magnitudeCurve) ([]float64, error) {
 func buildDelayWeight(
 	curve magnitudeCurve,
 	inBand func(float64) bool,
+	gridSize int,
 ) []float64 {
-	weight := make([]float64, FFTSize/2+1)
+	weight := make([]float64, gridSize/2+1)
 	for bin := range weight {
-		frequency := float64(bin) * SampleRate / FFTSize
+		frequency := float64(bin) * SampleRate / float64(gridSize)
 		if inBand(frequency) {
 			magnitude := curve(frequency)
 			weight[bin] = magnitude * magnitude
@@ -293,8 +337,8 @@ const magnitudeWeightFloor = 1e-3
 // complex objective: without it, a design minimising |H_wanted - H| treats an
 // error in a -60 dB stopband as a thousand times less important than the same
 // absolute error in the passband, and the stopband collapses.
-func buildMagnitudeWeight(curve magnitudeCurve) []float64 {
-	weight := make([]float64, FFTSize/2+1)
+func buildMagnitudeWeight(curve magnitudeCurve, gridSize int) []float64 {
+	weight := make([]float64, gridSize/2+1)
 
 	peak := 0.0
 	for bin := range weight {

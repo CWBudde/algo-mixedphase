@@ -98,6 +98,8 @@ compare:
         -document docs/MIXED_PHASE_FILTER_DESIGN.md \
         -responses docs/reference-response.csv \
         -impulses docs/reference-impulse.csv \
+        -sweep docs/reference-delay-sweep.csv \
+        -regimes docs/reference-phase-regimes.csv \
         > docs/reference-results.csv
     go run ./examples/graphiceq > docs/graphiceq-results.csv
 
@@ -117,6 +119,8 @@ compare-check:
         docs/reference-results.csv \
         docs/reference-response.csv \
         docs/reference-impulse.csv \
+        docs/reference-delay-sweep.csv \
+        docs/reference-phase-regimes.csv \
         docs/graphiceq-results.csv \
         docs/MIXED_PHASE_FILTER_DESIGN.md
 

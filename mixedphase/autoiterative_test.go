@@ -63,6 +63,30 @@ func TestDesignIterativeAutoValidation(t *testing.T) {
 			want:      ErrNonFiniteConfig,
 		},
 		{
+			name:      "non-finite floor",
+			prototype: lowpassPrototype(65, 0.1),
+			cfg:       AutoIterativeConfig{RelativeErrorFloor: math.Inf(1)},
+			want:      ErrNonFiniteConfig,
+		},
+		{
+			name:      "negative floor",
+			prototype: lowpassPrototype(65, 0.1),
+			cfg:       AutoIterativeConfig{RelativeErrorFloor: -1},
+			want:      ErrInvalidTolerance,
+		},
+		{
+			name:      "non-finite improvement",
+			prototype: lowpassPrototype(65, 0.1),
+			cfg:       AutoIterativeConfig{MinimumImprovementDB: math.NaN()},
+			want:      ErrNonFiniteConfig,
+		},
+		{
+			name:      "negative improvement",
+			prototype: lowpassPrototype(65, 0.1),
+			cfg:       AutoIterativeConfig{MinimumImprovementDB: -0.5},
+			want:      ErrInvalidTolerance,
+		},
+		{
 			name:      "negative epsilon reaches the inner design",
 			prototype: lowpassPrototype(65, 0.1),
 			cfg:       AutoIterativeConfig{Epsilon: -1},
@@ -77,6 +101,65 @@ func TestDesignIterativeAutoValidation(t *testing.T) {
 				t.Errorf("error = %v, want %v", err, testCase.want)
 			}
 		})
+	}
+}
+
+// TestDesignIterativeAutoDeclinesBudgetsThatBarelyHelp pins the improvement
+// margin.
+//
+// On a 129-tap low-pass the one-sample budget genuinely lowers the RMS dB error,
+// from 0.800 dB to 0.498 dB. Without a margin the search takes it: it spends a
+// sample of latency, abandons the exact minimum-phase design, and reports a
+// non-degenerate factorisation for three tenths of a decibel. Latency is a cost
+// the objective does not otherwise price.
+func TestDesignIterativeAutoDeclinesBudgetsThatBarelyHelp(t *testing.T) {
+	prototype := lowpassPrototype(129, 0.08)
+
+	const length = 129
+
+	margined, err := DesignIterativeAuto(prototype, AutoIterativeConfig{
+		Length:     length,
+		CoarseStep: 1,
+	})
+	if err != nil {
+		t.Fatalf("DesignIterativeAuto() error = %v", err)
+	}
+
+	if margined.Delay != 0 {
+		t.Errorf(
+			"selected delay %d for a %.3f dB gain; the margin should have "+
+				"declined it",
+			margined.Delay,
+			margined.Metrics.RMSMagnitudeErrorDB,
+		)
+	}
+
+	// With the margin effectively removed the same search does take the budget,
+	// which is what shows the margin is the operative constraint.
+	eager, err := DesignIterativeAuto(prototype, AutoIterativeConfig{
+		Length:               length,
+		CoarseStep:           1,
+		MinimumImprovementDB: 1e-12,
+	})
+	if err != nil {
+		t.Fatalf("DesignIterativeAuto() error = %v", err)
+	}
+
+	if eager.Delay == 0 {
+		t.Fatal(
+			"no budget improves this fixture at all, so the margin is not what " +
+				"produced the zero above",
+		)
+	}
+
+	gain := margined.Metrics.RMSMagnitudeErrorDB -
+		eager.Metrics.RMSMagnitudeErrorDB
+	if gain >= defaultMinimumImprovementDB {
+		t.Errorf(
+			"declined a %.3f dB gain, which is at or above the %.1f dB margin",
+			gain,
+			defaultMinimumImprovementDB,
+		)
 	}
 }
 

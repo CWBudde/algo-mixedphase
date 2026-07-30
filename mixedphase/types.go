@@ -24,8 +24,8 @@ var (
 	ErrInvalidLength = errors.New("mixedphase: invalid filter length")
 	// ErrInvalidDelay is returned when the requested pre-delay does not fit.
 	ErrInvalidDelay = errors.New("mixedphase: invalid delay")
-	// ErrInvalidPhaseMix is returned when phase mix is outside [0, 1].
-	ErrInvalidPhaseMix = errors.New("mixedphase: phase mix must be in [0, 1]")
+	// ErrInvalidPhaseMix is returned when phase mix is outside [0, 2].
+	ErrInvalidPhaseMix = errors.New("mixedphase: phase mix must be in [0, 2]")
 	// ErrInvalidEpsilon is returned when a negative magnitude floor is given.
 	ErrInvalidEpsilon = errors.New("mixedphase: epsilon must not be negative")
 	// ErrInvalidWindowAlpha is returned when a negative window alpha is given.
@@ -170,8 +170,14 @@ type PhaseInterpolationConfig struct {
 	// Length is the number of output taps. Zero uses the prototype length.
 	Length int
 
-	// Mix interpolates the unwrapped target phase: zero is minimum phase and
-	// one is linear phase with delay (Length-1)/2.
+	// Mix interpolates the unwrapped target phase across the whole phase
+	// continuum for a fixed magnitude: zero is minimum phase, one is linear
+	// phase with delay (Length-1)/2, and two is maximum phase. Values outside
+	// [0, 2] are rejected with [ErrInvalidPhaseMix].
+	//
+	// Mix prescribes phase, so the realised group delay is a consequence of it
+	// rather than an input. It rises from the target's minimum-phase group
+	// delay at zero to (Length-1)/2 at one and on to its reflection at two.
 	Mix float64
 
 	// FFTSize controls the dense design grid. Zero selects a power of two at
@@ -192,9 +198,10 @@ type ComplexLeastSquaresConfig struct {
 	// Length is the number of output taps. Zero uses the prototype length.
 	Length int
 
-	// Mix interpolates the prescribed phase: zero is minimum phase and one is
-	// linear phase with delay (Length-1)/2. It shares its meaning with
-	// [PhaseInterpolationConfig] so both designs approximate the same target.
+	// Mix interpolates the prescribed phase: zero is minimum phase, one is
+	// linear phase with delay (Length-1)/2, and two is maximum phase. It shares
+	// its meaning with [PhaseInterpolationConfig] so both designs approximate
+	// the same target.
 	Mix float64
 
 	// FFTSize controls the dense design grid. Zero selects a power of two at

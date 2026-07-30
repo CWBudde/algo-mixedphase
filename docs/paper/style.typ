@@ -119,4 +119,35 @@
   columns(2, body, gutter: 5mm)
 }
 
-#let code-path(path) = text(size: 7.8pt, raw(path))
+// breakable-identifier-length is the length beyond which a code path is given
+// explicit break opportunities. A column of this two-column layout fits about
+// fifty monospace characters at the size below, so anything much longer than
+// this overflows its container and overprints the text beside it.
+#let breakable-identifier-length = 40
+
+// code-path renders an identifier or repository path inline.
+//
+// Typst offers no line break inside a word, so the longest test names here would
+// otherwise run off the column. Those are given zero-width spaces at the
+// boundaries a reader would break at anyway: after a path separator or a dot,
+// and between a lower-case character and the upper-case one that starts the next
+// word of a camel-case name.
+//
+// The threshold matters for more than typography. A zero-width space survives
+// into the text layer, so copying a treated identifier out of the PDF yields a
+// string that will not match in a search. Applying the treatment only where the
+// alternative is an unreadable page keeps every short path — which is most of
+// them — exactly copyable.
+#let code-path(path) = {
+  let rendered = if path.len() <= breakable-identifier-length {
+    path
+  } else {
+    path
+      .replace(
+        regex("([a-z0-9])([A-Z])"),
+        match => match.captures.at(0) + "\u{200B}" + match.captures.at(1),
+      )
+      .replace(regex("([/.])"), match => match.captures.at(0) + "\u{200B}")
+  }
+  text(size: 7.8pt, raw(rendered))
+}

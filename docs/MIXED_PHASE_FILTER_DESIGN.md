@@ -395,7 +395,8 @@ only the degenerate case.
 `budde-adaptive` is the same construction with the delay budget chosen rather than
 supplied: it minimises RMS dB error over a candidate set of budgets that always
 contains zero, subject to relative error staying within three times the zero-delay
-value. Read its rows against `Budde iterative`. On all five smooth targets it selects
+value or under an absolute floor of 1e-2, and to a non-zero budget saving at least
+1 dB against the zero-delay design. Read its rows against `Budde iterative`. On all five smooth targets it selects
 zero and its row is therefore identical to `minimum-phase truncation` — the delay
 that bought nothing is simply not spent, and the 16.5-to-26.4-sample mean delays of
 the fixed budget become 0.5 to 10.4. On `steep-crossover` it selects 22 and reaches
@@ -406,6 +407,16 @@ the lowest relative error on five; it concedes relative error only on
 1.227%). Measured against `minimum-phase truncation` on that target, the trade is
 70.8 dB more stopband rejection over the bins where the target is already below
 −80 dB, for 2.63 samples of mean group delay.
+
+Both of those extra bounds earn their place. Without the absolute floor, a purely
+multiplicative passband ceiling rejects designs that are far better on the
+objective: designing `steep-crossover` into 193 taps, the three-times ceiling
+declines an 11-sample budget worth 16 dB in exchange for a passband regression
+under a hundredth of a decibel. Without the 1 dB margin, the search buys latency
+for nothing measurable — a 129-tap low-pass improves from 0.800 dB to 0.498 dB at a
+one-sample budget, and taking it abandons the exact minimum-phase design for three
+tenths of a decibel. `TestAdaptiveGuardDoesNotRejectAMuchBetterDesign` and
+`TestDesignIterativeAutoDeclinesBudgetsThatBarelyHelp` pin the two.
 
 Two cautions on that method. The candidate set is a strided scan with local
 refinement, not every admissible budget, so the selection is a heuristic — one
@@ -473,3 +484,85 @@ literature search, not a patent or formal novelty search.
 [potchinkov-1995]: https://doi.org/10.1016/0165-1684(95)00077-Q
 [wu-2013]: https://doi.org/10.1016/j.sigpro.2013.01.015
 [yan-ma-2004]: https://doi.org/10.1016/j.dsp.2004.08.003
+
+## What the delay budget is, and is not, for
+
+Everything above is measured at one operating point: 129 output taps from 257-tap
+prototypes. `docs/reference-delay-sweep.csv` covers the rest of the space — the same
+six curves rebuilt as 2049-tap fixtures, designed at 129, 257, 513 and 1025 output
+taps with the budget strided over the admissible range, plus a linear-phase family
+for comparison at equal latency. It is a separate artifact because a 257-tap
+prototype is shorter than a 513-tap filter, so at the published fixture length every
+method reproduces the target exactly and the comparison measures rounding. Each
+sweep row carries the prototype length it used; the two artifacts must not be read
+against each other.
+
+Two results come out of it, and both narrow what the budget should be used for.
+
+**Start from the floor, not from the latency allowance.** A magnitude request
+already carries a group delay: every causal realisation of a magnitude differs from
+the minimum-phase one by an all-pass factor, and all-pass group delay is
+non-negative, so nothing realising that magnitude is faster than minimum phase. At
+129 taps the six targets sit at 0.50, 5.86, 6.21, 8.63, 10.41 and 49.37 samples
+(room correction, low-pass, parametric EQ, deep notch, LR4, LR8). A budget is what
+is left of an application's latency allowance _after_ the floor has taken its
+share — which for the LR8 crossover is nothing at all.
+`TestZeroDelayDesignSitsOnTheMinimumPhaseFloor` establishes that these floors
+belong to the targets rather than to the split.
+
+**This construction spends its surplus as pure delay.** The linear-phase factor is
+symmetric, so it contributes exactly linear phase, and the group-delay deviation of
+the cascade equals that of its minimum-phase factor for every admissible budget.
+Across all six targets the measured ripple is identical to nine decimal places at
+every budget, whether or not the linear factor carries energy away from its centre
+tap: the all-pass the budget inserts is `z^-d`, which translates the group-delay
+curve and does not flatten it. `TestAdaptiveDelayBudgetCannotFlattenGroupDelay`
+pins the identity.
+
+That is a property of the construction, not of the latency. `DesignPhaseInterpolation`
+spends the same surplus on flatness: at 44.9 samples on the low-pass the
+factorisation still carries its full 1.117 samples of ripple where the prescribed
+continuum is at 0.419, and on the LR4 crossover 0.766 against 0.287. So a caller
+who wants flat group delay should prescribe the phase rather than raise this
+budget. `TestFactorisationHoldsItsRippleWhileTheContinuumDescends` pins both sides,
+and `docs/reference-phase-regimes.csv` carries the curves.
+
+**Below the floor only the magnitude can give way.** No phase choice reaches a
+latency under `tau_min`. Widening `DesignLowGroupDelay`'s `ToleranceDB` from 0.25 to
+2 dB buys delay below the floor on five of six targets — the low-pass most steeply,
+giving up 70% of its floor for 1.90 dB of RMS magnitude error — while the LR8
+crossover buys nothing, having no accuracy left to concede at 129 taps. Beyond 2 dB
+the measurement stops being meaningful: at 4 dB the optimiser tracks its iteration
+budget rather than its tolerance, and at 8 dB the constraint admits a spectral null
+where group delay is undefined.
+
+**The budget is a function of the output support, not of the available latency.**
+The best RMS dB error any non-zero budget saves against the zero-budget design:
+
+| target          | 129 taps | 257 taps | 513 taps | 1025 taps |
+| --------------- | -------: | -------: | -------: | --------: |
+| steep crossover | 57.19 dB | 23.05 dB |  0.00 dB |   0.00 dB |
+| room correction |  0.00 dB |  0.04 dB |  0.03 dB |   0.00 dB |
+| the other four  |  0.00 dB |  0.00 dB |  0.00 dB |   0.00 dB |
+
+One target benefits materially, and only below about 513 taps. The minimum-phase
+supports explain the ordering — 52 taps for the LR4 crossover, 53 for the low-pass,
+116 for the parametric EQ, 129 for the deep notch, 238 for the LR8 crossover and 995
+for room correction, taken as the leading taps holding all but 1e-6 of the factor's
+energy. Once the output length comfortably exceeds that support the factor fits at
+any admissible budget and the correction has nothing to recover. So a longer filter
+behind a generous delay line wants a **smaller** budget, not a larger one.
+
+What the construction does deliver is latency. A linear-phase filter of latency L
+has only 2L+1 taps to spend on the magnitude, while a minimum-phase-led design of N
+taps spends all N. Matching a 1025-tap zero-budget design's accuracy to within a
+thousandth of a decibel costs a linear-phase filter 22 times the latency on the deep
+notch, 19 on the parametric EQ, 18 on the LR4 crossover, 16 on the low-pass and 8 on
+the LR8 crossover; on room correction no sampled linear-phase latency matches it at
+all, the design sitting at 0.046 dB and 0.6 samples against the linear-phase family's
+best of 0.250 dB at 512 samples. The price is the minimum-phase factor's group-delay
+deviation, 0.8 to 8.0 samples here, which no budget reduces.
+`TestSweepLinearPhaseNeedsFarMoreLatency` and
+`TestSweepBudgetGainTableMatchesTheDocumentation` pin these figures; the
+linear-phase family is sampled every 32 samples of latency, so each factor is
+accurate to within one stride.

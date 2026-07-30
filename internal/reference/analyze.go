@@ -19,7 +19,26 @@ type responseAnalysis struct {
 }
 
 func analyze(target Target, taps []float64) (responseAnalysis, error) {
-	plan, err := algofft.NewPlan64(FFTSize)
+	return analyzeOn(target, taps, FFTSize)
+}
+
+// analyzeOn is analyze on an explicit grid, which must be the grid
+// target.DelayWeight was built for.
+func analyzeOn(
+	target Target,
+	taps []float64,
+	gridSize int,
+) (responseAnalysis, error) {
+	if len(target.DelayWeight) != gridSize/2+1 {
+		return responseAnalysis{}, fmt.Errorf(
+			"delay weight has %d bins, want %d for a %d-point grid",
+			len(target.DelayWeight),
+			gridSize/2+1,
+			gridSize,
+		)
+	}
+
+	plan, err := algofft.NewPlan64(gridSize)
 	if err != nil {
 		return responseAnalysis{}, fmt.Errorf(
 			"create analysis FFT plan: %w",
@@ -27,12 +46,12 @@ func analyze(target Target, taps []float64) (responseAnalysis, error) {
 		)
 	}
 
-	input := make([]complex128, FFTSize)
+	input := make([]complex128, gridSize)
 	for index, tap := range taps {
 		input[index] = complex(tap, 0)
 	}
 
-	spectrum := make([]complex128, FFTSize)
+	spectrum := make([]complex128, gridSize)
 	if err := plan.Forward(spectrum, input); err != nil {
 		return responseAnalysis{}, fmt.Errorf("forward analysis FFT: %w", err)
 	}
@@ -47,7 +66,7 @@ func analyze(target Target, taps []float64) (responseAnalysis, error) {
 			continue
 		}
 
-		omega := 2 * math.Pi * float64(bin) / FFTSize
+		omega := 2 * math.Pi * float64(bin) / float64(gridSize)
 		slope := complex(0, 0)
 
 		for index, tap := range taps {

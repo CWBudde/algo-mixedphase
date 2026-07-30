@@ -167,6 +167,22 @@ func mustTargetNames() []string {
 	return names
 }
 
+// maximumPhaseMix is the phase mix at which the prescribed continuum reaches
+// maximum phase, mirroring the bound the design entry points enforce.
+const maximumPhaseMix = 2.0
+
+// PrescribesPhase reports whether a lab method takes its phase as a prescribed
+// curve, in which case its delay slider spans the whole continuum from minimum
+// through linear to maximum phase rather than a support split.
+//
+// It is exported so the page can size that slider the same way the design does;
+// a slider that stopped at linear phase would make half the continuum
+// unreachable, and one that ran past it for the factorisation would silently
+// clamp.
+func PrescribesPhase(method string) bool {
+	return method == "interpolation" || method == "minimax"
+}
+
 // Design runs one lab request and evaluates the curves the page draws.
 //
 // A request naming a published comparison target is driven on the harness grid
@@ -185,12 +201,24 @@ func Design(request Request) (Result, error) {
 		length = len(fixture.prototype)
 	}
 
+	// The slider means two different things. For the alternating factorisation
+	// it is a support split, so it stops at the linear-phase endpoint where the
+	// linear factor has consumed the whole filter. For the prescribed-phase
+	// designs it is a position on the phase continuum, which runs on past linear
+	// phase to maximum phase, so those accept twice the range. The scale is the
+	// same in both cases: half of (length-1) is linear phase.
 	maximumDelay := (length - 1) / 2
-	delay := min(request.Delay, maximumDelay)
+
+	ceiling := maximumDelay
+	if PrescribesPhase(request.Method) {
+		ceiling = 2 * maximumDelay
+	}
+
+	delay := min(request.Delay, ceiling)
 
 	mix := 0.0
 	if maximumDelay > 0 {
-		mix = min(float64(delay)/float64(maximumDelay), 1)
+		mix = min(float64(delay)/float64(maximumDelay), maximumPhaseMix)
 	}
 
 	var result mixedphase.Result

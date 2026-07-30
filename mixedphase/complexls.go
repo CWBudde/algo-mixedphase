@@ -43,7 +43,7 @@ func DesignComplexLeastSquares(
 		return Result{}, err
 	}
 
-	if cfg.Mix < 0 || cfg.Mix > 1 {
+	if cfg.Mix < 0 || cfg.Mix > maximumPhaseMix {
 		return Result{}, ErrInvalidPhaseMix
 	}
 
